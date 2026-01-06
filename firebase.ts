@@ -1,15 +1,15 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, set, remove, update } from 'firebase/database';
 
-// Firebase 설정 - 아래 값을 본인의 Firebase 프로젝트 설정으로 교체하세요!
+// Firebase 설정
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAbH9YUsku0fm8pXjk58rSnFBN5WBnxkhs",
+  authDomain: "zombie-b2a13.firebaseapp.com",
+  databaseURL: "https://zombie-b2a13-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "zombie-b2a13",
+  storageBucket: "zombie-b2a13.firebasestorage.app",
+  messagingSenderId: "604991775962",
+  appId: "1:604991775962:web:b4b3eddbc200aa8ae8b1e3"
 };
 
 // Firebase 초기화
