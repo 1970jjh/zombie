@@ -74,16 +74,21 @@ export default function App() {
     }
   }, [sessions, phase, role, userProfile.sessionId]);
 
-  // 팀 메모 실시간 동기화
+  // 팀 메모 실시간 동기화 (새 세션 진입 시 메모 초기화)
   useEffect(() => {
-    if (!userProfile.sessionId || !userProfile.teamNumber) return;
+    if (!userProfile.sessionId || !userProfile.teamNumber) {
+      setMemo(''); // 세션 없으면 메모 초기화
+      return;
+    }
+
+    // 세션/팀 변경 시 먼저 메모 초기화
+    setMemo('');
 
     const memoRef = ref(database, `sessions/${userProfile.sessionId}/memos/${userProfile.teamNumber}`);
     const unsubscribe = onValue(memoRef, (snapshot) => {
       const data = snapshot.val();
-      if (data !== null && data !== undefined) {
-        setMemo(data);
-      }
+      // 데이터가 있으면 설정, 없으면 빈 문자열 유지
+      setMemo(data || '');
     });
 
     return () => unsubscribe();
