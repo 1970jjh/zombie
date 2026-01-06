@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { GamePhase, UserRole, UserProfile, Session, Clue, SubmissionData, Participant } from './types';
 import { CLUES } from './constants';
+import { sessionsRef, getSessionRef, onValue, set, remove, update } from './firebase';
 
 const CORRECT_ANSWER = {
   day: '일요일',
@@ -30,36 +31,37 @@ export default function App() {
   const [role, setRole] = useState<UserRole>('STUDENT');
   const [isAdminAuth, setIsAdminAuth] = useState(false);
   const [adminPassInput, setAdminPassInput] = useState('');
-  
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile>({ name: '', sessionId: '', teamNumber: 1 });
   const [phase, setPhase] = useState<GamePhase>(GamePhase.INTRO);
-  
+
   const [isViewAllMode, setIsViewAllMode] = useState(false);
   const [selectedClue, setSelectedClue] = useState<Clue | null>(null);
   const [memo, setMemo] = useState('');
   const [submitData, setSubmitData] = useState({ day: '', ampm: '오전', hour: '09', minute: '30' });
 
-  // 세션 데이터 실시간 동기화
+  // Firebase 실시간 동기화
   useEffect(() => {
-    const loadSessions = () => {
-      const saved = localStorage.getItem('zombie_v8_sessions');
-      if (saved) setSessions(JSON.parse(saved));
-    };
+    const unsubscribe = onValue(sessionsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Firebase 객체를 배열로 변환
+        const sessionsArray: Session[] = Object.keys(data).map(key => ({
+          ...data[key],
+          id: key,
+          participants: data[key].participants ? Object.values(data[key].participants) : [],
+          submissions: data[key].submissions || {}
+        }));
+        setSessions(sessionsArray);
+      } else {
+        setSessions([]);
+      }
+    });
 
-    loadSessions();
-    window.addEventListener('storage', loadSessions);
-    const interval = setInterval(loadSessions, 1000);
-    return () => {
-      window.removeEventListener('storage', loadSessions);
-      clearInterval(interval);
-    };
+    return () => unsubscribe();
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem('zombie_v8_sessions', JSON.stringify(sessions));
-  }, [sessions]);
 
   // 학습자: 관리자의 발표 상태 감시
   useEffect(() => {
@@ -79,39 +81,46 @@ export default function App() {
     return distributeClues(CLUES, activeSession.teamCount, userProfile.teamNumber);
   }, [activeSession, userProfile.teamNumber, isViewAllMode]);
 
-  const createSession = (name: string, teams: number) => {
-    const newSession: Session = {
-      id: Math.random().toString(36).substr(2, 6).toUpperCase(),
+  const createSession = async (name: string, teams: number) => {
+    const sessionId = Math.random().toString(36).substr(2, 6).toUpperCase();
+    const newSession = {
       groupName: name,
       teamCount: teams,
       isOpen: false,
       isResultReleased: false,
       submissions: {},
-      participants: [],
+      participants: {},
       createdAt: Date.now()
     };
-    setSessions(prev => [...prev, newSession]);
-    setActiveSessionId(newSession.id);
+
+    await set(getSessionRef(sessionId), newSession);
+    setActiveSessionId(sessionId);
   };
 
-  const registerParticipant = () => {
+  const registerParticipant = async () => {
     if (!userProfile.sessionId || !userProfile.name) return;
-    
-    setSessions(prev => prev.map(s => {
-      if (s.id === userProfile.sessionId) {
-        // 이미 등록된 이름인지 확인 (중복 방지)
-        const alreadyJoined = s.participants.some(p => p.name === userProfile.name && p.teamNumber === userProfile.teamNumber);
-        if (!alreadyJoined) {
-          const newParticipant: Participant = {
-            name: userProfile.name,
-            teamNumber: userProfile.teamNumber,
-            joinedAt: Date.now()
-          };
-          return { ...s, participants: [...s.participants, newParticipant] };
-        }
-      }
-      return s;
-    }));
+
+    const session = sessions.find(s => s.id === userProfile.sessionId);
+    if (!session) return;
+
+    // 이미 등록된 이름인지 확인
+    const alreadyJoined = session.participants.some(
+      p => p.name === userProfile.name && p.teamNumber === userProfile.teamNumber
+    );
+
+    if (!alreadyJoined) {
+      const participantId = Date.now().toString();
+      const newParticipant: Participant = {
+        name: userProfile.name,
+        teamNumber: userProfile.teamNumber,
+        joinedAt: Date.now()
+      };
+
+      await update(getSessionRef(userProfile.sessionId), {
+        [`participants/${participantId}`]: newParticipant
+      });
+    }
+
     setPhase(GamePhase.STORY);
   };
 
@@ -126,7 +135,7 @@ export default function App() {
     }
   };
 
-  const handleFinalSubmit = (e: React.FormEvent) => {
+  const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userProfile.sessionId) return;
 
@@ -135,34 +144,35 @@ export default function App() {
       userName: userProfile.name
     };
 
-    setSessions(prev => prev.map(s => {
-      if (s.id === userProfile.sessionId) {
-        return {
-          ...s,
-          submissions: { ...s.submissions, [userProfile.teamNumber]: newSubmission }
-        };
-      }
-      return s;
-    }));
+    await update(getSessionRef(userProfile.sessionId), {
+      [`submissions/${userProfile.teamNumber}`]: newSubmission
+    });
 
     setPhase(GamePhase.CHECKING);
   };
 
-  const toggleSessionOpen = (id: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, isOpen: !s.isOpen } : s));
+  const toggleSessionOpen = async (id: string) => {
+    const session = sessions.find(s => s.id === id);
+    if (session) {
+      await update(getSessionRef(id), { isOpen: !session.isOpen });
+    }
   };
 
-  const releaseResults = (id: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, isResultReleased: true } : s));
+  const releaseResults = async (id: string) => {
+    await update(getSessionRef(id), { isResultReleased: true });
   };
 
-  const resetSession = (id: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, isResultReleased: false, submissions: {}, participants: [] } : s));
+  const resetSession = async (id: string) => {
+    await update(getSessionRef(id), {
+      isResultReleased: false,
+      submissions: {},
+      participants: {}
+    });
   };
 
-  const deleteSession = (id: string) => {
+  const deleteSession = async (id: string) => {
     if (confirm('이 교육 그룹을 삭제하시겠습니까?')) {
-      setSessions(prev => prev.filter(s => s.id !== id));
+      await remove(getSessionRef(id));
     }
   };
 
@@ -188,10 +198,10 @@ export default function App() {
             <h2 className="text-3xl font-poster text-white uppercase tracking-tighter text-center">Admin Access</h2>
             <div className="space-y-2">
               <label className="text-xs font-mono text-zinc-500 uppercase font-bold">Input Command Sequence</label>
-              <input 
-                type="password" 
-                value={adminPassInput} 
-                onChange={(e) => setAdminPassInput(e.target.value)} 
+              <input
+                type="password"
+                value={adminPassInput}
+                onChange={(e) => setAdminPassInput(e.target.value)}
                 placeholder="PASSWORD"
                 className="brutal-input w-full text-center tracking-widest text-2xl font-poster"
               />
@@ -280,13 +290,13 @@ export default function App() {
                   })}
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button onClick={() => toggleSessionOpen(s.id)} className={`brutal-btn py-3 text-xs ${s.isOpen ? 'bg-zinc-800 text-white' : 'bg-blue-600 text-white border-white'}`}>
                   {s.isOpen ? 'GATE CLOSED' : 'OPEN GATE'}
                 </button>
-                <button 
-                  onClick={() => releaseResults(s.id)} 
+                <button
+                  onClick={() => releaseResults(s.id)}
                   disabled={s.isResultReleased}
                   className={`brutal-btn py-3 text-xs ${s.isResultReleased ? 'opacity-30' : 'bg-emerald-600 text-white border-white'}`}
                 >
@@ -310,7 +320,7 @@ export default function App() {
       </div>
       <h1 className="text-3xl font-poster text-white mb-1 tracking-tighter uppercase text-center leading-none">THE<br/><span className="text-red-600 text-4xl">RESURRECTION</span></h1>
       <p className="text-[9px] font-mono text-zinc-500 tracking-[0.4em] mb-4 uppercase text-center font-bold">Protocol: Survival Simulation</p>
-      
+
       <div className="w-full brutal-card p-5 bg-zinc-950 space-y-4">
         <div className="space-y-3">
           <div>
@@ -356,7 +366,7 @@ export default function App() {
       <div className="max-w-md w-full py-12 space-y-10 animate-fade-in">
         <div className="space-y-8 text-[16px] leading-relaxed font-bold break-keep text-justify">
           <p className="first-letter:text-7xl first-letter:font-poster first-letter:text-red-700 first-letter:float-left first-letter:mr-3 first-letter:mt-1 border-l-8 border-red-700 pl-4 py-2">
-            옛날 어느 마을, 청년 콜롬버스와 그의 동료 위치타가 살고 있었습니다. 평화로운 시골마을. 어느 날, 숲 속에 시체들이 돌아다닌다는 이상한 소문이 돌았습니다. 
+            옛날 어느 마을, 청년 콜롬버스와 그의 동료 위치타가 살고 있었습니다. 평화로운 시골마을. 어느 날, 숲 속에 시체들이 돌아다닌다는 이상한 소문이 돌았습니다.
           </p>
           <p className="border-r-8 border-white pr-4 py-2 text-right">
             평화롭던 마을에 들이닥친 시체들은 바로 좀비였습니다. 좀비들은 사람을 공격하고 납치하기 시작했고, 위치타도 함께 실종 되었습니다. 그녀를 찾기 위해 수소문 하였지만, 아는 사람이 없었습니다!
@@ -366,13 +376,13 @@ export default function App() {
           </p>
           <div className="brutal-card bg-red-950 p-6 italic text-white relative border-white">
             <span className="absolute -top-4 -left-2 bg-black px-2 text-[11px] font-mono border-2 border-white font-bold">URGENT INTEL</span>
-            "하지만 우연히 알게 된 정보로 ‘생사초’를 찾아 다시 그녀를 살리기 위해 나서는데… 과연 이 좀비들을 물리치고 동료 위치타를 무사히 구할 수 있을지…"
+            "하지만 우연히 알게 된 정보로 '생사초'를 찾아 다시 그녀를 살리기 위해 나서는데… 과연 이 좀비들을 물리치고 동료 위치타를 무사히 구할 수 있을지…"
           </div>
           <p className="text-center font-poster text-2xl text-red-600 uppercase tracking-tighter">
             THE JOURNEY BEGINS WITH YOU.
           </p>
         </div>
-        <button 
+        <button
           onClick={() => setPhase(GamePhase.MAIN_GAME)}
           className="brutal-btn-red w-full py-6 text-3xl tracking-[0.1em]"
         >
@@ -401,18 +411,18 @@ export default function App() {
              <span className="w-3 h-3 bg-red-600 animate-pulse border-2 border-white"></span>
              INTEL FRAGMENTS
            </h3>
-           <button 
+           <button
              onClick={() => setIsViewAllMode(!isViewAllMode)}
              className={`px-3 py-1 font-mono text-[10px] border-4 transition-all font-bold ${isViewAllMode ? 'bg-white text-black border-black shadow-[2px_2px_0px_#e11d48]' : 'bg-black text-zinc-500 border-zinc-800'}`}
            >
              {isViewAllMode ? 'SHOW UNIT ONLY' : 'VIEW ALL INTEL'}
            </button>
         </div>
-        
+
         <div className="grid grid-cols-3 gap-3">
           {myClues.map(clue => (
-            <div 
-              key={clue.id} 
+            <div
+              key={clue.id}
               onClick={() => setSelectedClue(clue)}
               className="relative aspect-square bg-black border-4 border-zinc-800 cursor-pointer hover:border-white transition-all overflow-hidden group active:scale-95 shadow-[4px_4px_0px_rgba(0,0,0,0.5)]"
             >
@@ -428,7 +438,7 @@ export default function App() {
       <div className="space-y-4">
         <h3 className="text-sm font-poster text-white uppercase tracking-[0.2em]">COLLABORATIVE LOG</h3>
         <div className="brutal-card p-1 border-white shadow-none">
-          <textarea 
+          <textarea
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
             placeholder="Record shared information from other units here..."
@@ -438,7 +448,7 @@ export default function App() {
       </div>
 
       <div className="fixed bottom-10 left-0 right-0 px-6 max-w-md mx-auto z-[80]">
-        <button 
+        <button
           onClick={() => setPhase(GamePhase.SUBMIT)}
           className="brutal-btn w-full py-6 text-3xl shadow-[8px_8px_0px_#000]"
         >
@@ -449,8 +459,8 @@ export default function App() {
       {selectedClue && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/98 backdrop-blur-xl">
           <div className="brutal-card p-2 border-white w-full max-w-sm animate-scale-in relative">
-            <button 
-              onClick={() => setSelectedClue(null)} 
+            <button
+              onClick={() => setSelectedClue(null)}
               className="absolute -top-4 -right-4 w-12 h-12 brutal-btn-red flex items-center justify-center text-3xl font-poster z-50"
             >
               X
@@ -474,13 +484,13 @@ export default function App() {
          <h2 className="text-5xl font-poster text-white uppercase tracking-tighter">GOLDEN TIME</h2>
          <p className="text-zinc-500 font-mono text-xs uppercase font-bold">Precision is survival.</p>
       </div>
-      
+
       <form onSubmit={handleFinalSubmit} className="brutal-card p-8 bg-zinc-950 space-y-8 border-white">
         <div className="space-y-2">
           <label className="text-[10px] font-mono text-zinc-400 uppercase ml-1 font-bold">Proposed Day</label>
-          <select 
-            required 
-            value={submitData.day} 
+          <select
+            required
+            value={submitData.day}
             onChange={(e) => setSubmitData({...submitData, day: e.target.value})}
             className="brutal-input w-full text-center font-poster text-2xl uppercase appearance-none"
           >
@@ -488,12 +498,12 @@ export default function App() {
             {['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'].map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         </div>
-        
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-[10px] font-mono text-zinc-400 uppercase ml-1 font-bold">Period</label>
-            <select 
-              value={submitData.ampm} 
+            <select
+              value={submitData.ampm}
               onChange={(e) => setSubmitData({...submitData, ampm: e.target.value})}
               className="brutal-input w-full text-center font-poster text-2xl appearance-none"
             >
