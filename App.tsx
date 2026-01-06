@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { GamePhase, UserRole, UserProfile, Session, Clue, SubmissionData, Participant } from './types';
 import { CLUES } from './constants';
-import { sessionsRef, getSessionRef, onValue, set, remove, update } from './firebase';
+import { sessionsRef, getSessionRef, onValue, set, remove, update, database, ref } from './firebase';
 
 const CORRECT_ANSWER = {
   day: '일요일',
@@ -41,6 +41,7 @@ export default function App() {
   const [selectedClue, setSelectedClue] = useState<Clue | null>(null);
   const [memo, setMemo] = useState('');
   const [submitData, setSubmitData] = useState({ day: '', ampm: '오전', hour: '09', minute: '30' });
+  const memoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Firebase 실시간 동기화
   useEffect(() => {
@@ -72,6 +73,40 @@ export default function App() {
       }
     }
   }, [sessions, phase, role, userProfile.sessionId]);
+
+  // 팀 메모 실시간 동기화
+  useEffect(() => {
+    if (!userProfile.sessionId || !userProfile.teamNumber) return;
+
+    const memoRef = ref(database, `sessions/${userProfile.sessionId}/memos/${userProfile.teamNumber}`);
+    const unsubscribe = onValue(memoRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null && data !== undefined) {
+        setMemo(data);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [userProfile.sessionId, userProfile.teamNumber]);
+
+  // 메모 변경 시 Firebase에 저장 (디바운스 적용)
+  const handleMemoChange = (newMemo: string) => {
+    setMemo(newMemo);
+
+    // 이전 타이머 취소
+    if (memoTimeoutRef.current) {
+      clearTimeout(memoTimeoutRef.current);
+    }
+
+    // 500ms 후에 Firebase에 저장 (타이핑 중 너무 많은 요청 방지)
+    memoTimeoutRef.current = setTimeout(async () => {
+      if (userProfile.sessionId && userProfile.teamNumber) {
+        await update(getSessionRef(userProfile.sessionId), {
+          [`memos/${userProfile.teamNumber}`]: newMemo
+        });
+      }
+    }, 500);
+  };
 
   const activeSession = sessions.find(s => s.id === (role === 'ADMIN' ? activeSessionId : userProfile.sessionId));
 
@@ -436,12 +471,15 @@ export default function App() {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-poster text-white uppercase tracking-[0.2em]">COLLABORATIVE LOG</h3>
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-poster text-white uppercase tracking-[0.2em]">COLLABORATIVE LOG</h3>
+          <span className="text-[10px] font-mono text-green-500 animate-pulse">● LIVE SYNC</span>
+        </div>
         <div className="brutal-card p-1 border-white shadow-none">
           <textarea
             value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder="Record shared information from other units here..."
+            onChange={(e) => handleMemoChange(e.target.value)}
+            placeholder="팀원들과 실시간 공유됩니다. 다른 팀에서 받은 정보를 기록하세요..."
             className="w-full h-64 bg-black p-5 text-base text-green-500 font-mono outline-none resize-none placeholder:text-zinc-800 border-none font-bold"
           />
         </div>
