@@ -40,7 +40,7 @@ export default function App() {
   const [isViewAllMode, setIsViewAllMode] = useState(false);
   const [selectedClue, setSelectedClue] = useState<Clue | null>(null);
   const [memo, setMemo] = useState('');
-  const [submitData, setSubmitData] = useState({ day: '', ampm: '오전', hour: '09', minute: '30' });
+  const [submitData, setSubmitData] = useState({ day: '', ampm: '오전', hour: '00', minute: '00' });
   const memoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Firebase 실시간 동기화
@@ -98,14 +98,14 @@ export default function App() {
       clearTimeout(memoTimeoutRef.current);
     }
 
-    // 500ms 후에 Firebase에 저장 (타이핑 중 너무 많은 요청 방지)
+    // 300ms 후에 Firebase에 저장 (더 빠른 동기화)
     memoTimeoutRef.current = setTimeout(async () => {
       if (userProfile.sessionId && userProfile.teamNumber) {
         await update(getSessionRef(userProfile.sessionId), {
           [`memos/${userProfile.teamNumber}`]: newMemo
         });
       }
-    }, 500);
+    }, 300);
   };
 
   const activeSession = sessions.find(s => s.id === (role === 'ADMIN' ? activeSessionId : userProfile.sessionId));
@@ -423,12 +423,14 @@ export default function App() {
         >
           ENTER THE SECTOR
         </button>
+        <button type="button" onClick={() => setPhase(GamePhase.INTRO)} className="w-full text-[10px] font-mono text-zinc-600 uppercase underline font-bold mt-4">Back to Lobby</button>
       </div>
     </div>
   );
 
   const renderStudentMain = () => (
     <div className="max-w-md mx-auto px-5 py-8 pb-48 animate-fade-in space-y-10">
+      <button type="button" onClick={() => setPhase(GamePhase.STORY)} className="text-[10px] font-mono text-zinc-600 uppercase underline font-bold">← Back to Story</button>
       <div className="brutal-card p-6 border-white bg-black flex items-center justify-between shadow-[8px_8px_0px_#e11d48]">
          <div>
             <span className="text-[10px] font-mono text-zinc-500 uppercase block font-bold">OPERATIVE</span>
@@ -553,7 +555,7 @@ export default function App() {
             <label className="text-[10px] font-mono text-zinc-400 uppercase ml-1 font-bold">Time</label>
             <div className="flex gap-2">
               <select value={submitData.hour} onChange={(e) => setSubmitData({...submitData, hour: e.target.value})} className="brutal-input flex-1 text-center font-poster text-2xl appearance-none">
-                {Array.from({length: 12}, (_, i) => String(i + 1).padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
+                {['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => <option key={h} value={h}>{h}</option>)}
               </select>
               <select value={submitData.minute} onChange={(e) => setSubmitData({...submitData, minute: e.target.value})} className="brutal-input flex-1 text-center font-poster text-2xl appearance-none">
                 {['00', '10', '20', '30', '40', '50'].map(m => <option key={m} value={m}>{m}</option>)}
