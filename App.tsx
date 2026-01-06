@@ -74,6 +74,11 @@ export default function App() {
     }
   }, [sessions, phase, role, userProfile.sessionId]);
 
+  // 세션 변경 시 제출 데이터 초기화
+  useEffect(() => {
+    setSubmitData({ day: '', ampm: '오전', hour: '00', minute: '00' });
+  }, [userProfile.sessionId]);
+
   // 팀 메모 실시간 동기화 (새 세션 진입 시 메모 초기화)
   useEffect(() => {
     if (!userProfile.sessionId || !userProfile.teamNumber) {
