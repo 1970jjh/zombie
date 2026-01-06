@@ -1,0 +1,137 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>생사초를 찾아라: BRUTAL RESURRECTION</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;700;900&family=Black+Han+Sans&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --blood: #e11d48;
+            --obsidian: #000000;
+            --raw-white: #f8fafc;
+            --brutal-border: 4px solid #fff;
+        }
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: var(--obsidian);
+            color: var(--raw-white);
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .font-poster { font-family: 'Black Han Sans', sans-serif; }
+        .font-mono { font-family: 'Space Mono', monospace; }
+        
+        /* Brutalist Style Utilities */
+        .brutal-card {
+            background: #111;
+            border: var(--brutal-border);
+            box-shadow: 10px 10px 0px var(--blood);
+            transition: all 0.1s;
+        }
+        .brutal-card:active {
+            transform: translate(4px, 4px);
+            box-shadow: 6px 6px 0px var(--blood);
+        }
+        .brutal-btn {
+            background: #fff;
+            color: #000;
+            border: 4px solid #000;
+            box-shadow: 6px 6px 0px var(--blood);
+            font-family: 'Black Han Sans', sans-serif;
+            text-transform: uppercase;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .brutal-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 0px 0px 0px var(--blood);
+        }
+        .brutal-btn-red {
+            background: var(--blood);
+            color: #fff;
+            border: 4px solid #fff;
+            box-shadow: 6px 6px 0px #000;
+            font-family: 'Black Han Sans', sans-serif;
+        }
+        .brutal-input {
+            background: #000;
+            border: 4px solid #fff;
+            color: #fff;
+            padding: 1rem;
+            outline: none;
+            font-family: 'Space Mono', monospace;
+        }
+        .brutal-input:focus {
+            border-color: var(--blood);
+            box-shadow: 6px 6px 0px var(--blood);
+        }
+
+        .vignette {
+            background: radial-gradient(circle, transparent 20%, #000 100%);
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            z-index: 5;
+            opacity: 0.8;
+        }
+        
+        .glitch { animation: glitch 1.5s linear infinite; }
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            2% { transform: translate(2px, -2px); text-shadow: 2px 0 red; }
+            4% { transform: translate(-2px, 2px); text-shadow: -2px 0 blue; }
+            6% { transform: translate(0); text-shadow: none; }
+        }
+
+        /* Scanline effect moved to background only to ensure text clarity */
+        .bg-pattern {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 4px, 3px 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Ensure all text has priority over patterns */
+        #root {
+            position: relative;
+            z-index: 10;
+        }
+
+        ::-webkit-scrollbar { width: 12px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: #fff; border: 4px solid #000; }
+
+        select.brutal-input {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='white' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5H7z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.5rem;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
