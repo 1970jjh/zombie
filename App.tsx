@@ -64,15 +64,25 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 학습자: 관리자의 발표 상태 감시
+  // 학습자: 팀 제출 상태 및 결과 발표 실시간 감시
   useEffect(() => {
-    if (role === 'STUDENT' && phase === GamePhase.CHECKING && userProfile.sessionId) {
-      const currentSession = sessions.find(s => s.id === userProfile.sessionId);
-      if (currentSession?.isResultReleased) {
-        setPhase(GamePhase.RESULT);
-      }
+    if (role !== 'STUDENT' || !userProfile.sessionId) return;
+
+    const currentSession = sessions.find(s => s.id === userProfile.sessionId);
+    if (!currentSession) return;
+
+    // 결과가 발표되면 RESULT 화면으로 이동
+    if (currentSession.isResultReleased) {
+      setPhase(GamePhase.RESULT);
+      return;
     }
-  }, [sessions, phase, role, userProfile.sessionId]);
+
+    // 우리 팀이 제출했으면 CHECKING 화면으로 이동 (STORY나 MAIN_GAME, SUBMIT에서)
+    const hasTeamSubmitted = !!currentSession.submissions[userProfile.teamNumber];
+    if (hasTeamSubmitted && (phase === GamePhase.STORY || phase === GamePhase.MAIN_GAME || phase === GamePhase.SUBMIT)) {
+      setPhase(GamePhase.CHECKING);
+    }
+  }, [sessions, phase, role, userProfile.sessionId, userProfile.teamNumber]);
 
   // 세션 변경 시 제출 데이터 초기화
   useEffect(() => {
