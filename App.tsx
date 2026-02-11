@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { GamePhase, UserRole, UserProfile, Session, Clue, SubmissionData, Participant } from './types';
 import { CLUES } from './constants';
-import { sessionsRef, getSessionRef, onValue, set, remove, update, database, ref } from './firebase';
+import { sessionsRef, getSessionRef, onValue, set, remove, update, database, ref, authReady } from './firebase';
 
 const CORRECT_ANSWER = {
   day: '일요일',
@@ -43,8 +43,23 @@ export default function App() {
   const [submitData, setSubmitData] = useState({ day: '', ampm: '오전', hour: '00', minute: '00' });
   const memoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Firebase 실시간 동기화
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Firebase 익명 인증 대기
   useEffect(() => {
+    authReady
+      .then(() => setIsAuthReady(true))
+      .catch((err) => {
+        console.error('Firebase 인증 실패:', err);
+        setAuthError('Firebase 인증에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      });
+  }, []);
+
+  // Firebase 실시간 동기화 (인증 완료 후)
+  useEffect(() => {
+    if (!isAuthReady) return;
+
     const unsubscribe = onValue(sessionsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -62,7 +77,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isAuthReady]);
 
   // 학습자: 팀 제출 상태 및 결과 발표 실시간 감시
   useEffect(() => {
@@ -591,6 +606,29 @@ export default function App() {
       </form>
     </div>
   );
+
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center px-6">
+        <div className="brutal-card p-10 w-full max-w-sm space-y-6 text-center border-red-600">
+          <h2 className="text-3xl font-poster text-red-600 uppercase tracking-tighter">CONNECTION FAILED</h2>
+          <p className="text-sm font-mono text-zinc-400">{authError}</p>
+          <button onClick={() => window.location.reload()} className="brutal-btn-red w-full py-4 text-xl">RETRY</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-t-8 border-r-8 border-red-600 border-l-8 border-l-zinc-800 border-b-8 border-b-zinc-800 rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm font-mono text-zinc-500 uppercase tracking-widest font-bold">Establishing Connection...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans selection:bg-red-500 overflow-x-hidden">
