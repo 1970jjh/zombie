@@ -8,25 +8,53 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;700;900&family=Black+Han+Sans&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        /* ===== 나이트 모드 (기본) ===== */
         :root {
             --blood: #e11d48;
-            --obsidian: #000000;
-            --raw-white: #f8fafc;
-            --brutal-border: 4px solid #fff;
+            --bg-primary: #000000;
+            --bg-secondary: #111111;
+            --bg-card: #111;
+            --bg-input: #000;
+            --text-primary: #f8fafc;
+            --text-secondary: #a1a1aa;
+            --border-primary: #fff;
+            --border-secondary: #3f3f46;
+            --brutal-border: 4px solid var(--border-primary);
+            --shadow-color: #000;
+            --scrollbar-track: #000;
+            --scrollbar-thumb: #fff;
         }
+
+        /* ===== 데이 모드 ===== */
+        .theme-day {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f4f4f5;
+            --bg-card: #f9fafb;
+            --bg-input: #ffffff;
+            --text-primary: #18181b;
+            --text-secondary: #52525b;
+            --border-primary: #18181b;
+            --border-secondary: #d4d4d8;
+            --brutal-border: 4px solid var(--border-primary);
+            --shadow-color: #d4d4d8;
+            --scrollbar-track: #f4f4f5;
+            --scrollbar-thumb: #18181b;
+        }
+
         body {
             font-family: 'Noto Sans KR', sans-serif;
-            background-color: var(--obsidian);
-            color: var(--raw-white);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             overflow-x: hidden;
             -webkit-tap-highlight-color: transparent;
+            transition: background-color 0.3s, color 0.3s;
         }
         .font-poster { font-family: 'Black Han Sans', sans-serif; }
         .font-mono { font-family: 'Space Mono', monospace; }
-        
+
         /* Brutalist Style Utilities */
         .brutal-card {
-            background: #111;
+            background: var(--bg-card);
             border: var(--brutal-border);
             box-shadow: 10px 10px 0px var(--blood);
             transition: all 0.1s;
@@ -36,9 +64,9 @@
             box-shadow: 6px 6px 0px var(--blood);
         }
         .brutal-btn {
-            background: #fff;
-            color: #000;
-            border: 4px solid #000;
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            border: 4px solid var(--border-primary);
             box-shadow: 6px 6px 0px var(--blood);
             font-family: 'Black Han Sans', sans-serif;
             text-transform: uppercase;
@@ -54,14 +82,14 @@
         .brutal-btn-red {
             background: var(--blood);
             color: #fff;
-            border: 4px solid #fff;
-            box-shadow: 6px 6px 0px #000;
+            border: 4px solid var(--border-primary);
+            box-shadow: 6px 6px 0px var(--shadow-color);
             font-family: 'Black Han Sans', sans-serif;
         }
         .brutal-input {
-            background: #000;
-            border: 4px solid #fff;
-            color: #fff;
+            background: var(--bg-input);
+            border: 4px solid var(--border-primary);
+            color: var(--text-primary);
             padding: 1rem;
             outline: none;
             font-family: 'Space Mono', monospace;
@@ -72,14 +100,15 @@
         }
 
         .vignette {
-            background: radial-gradient(circle, transparent 20%, #000 100%);
+            background: radial-gradient(circle, transparent 20%, var(--bg-primary) 100%);
             pointer-events: none;
             position: fixed;
             inset: 0;
             z-index: 5;
             opacity: 0.8;
         }
-        
+        .theme-day .vignette { opacity: 0.15; }
+
         .glitch { animation: glitch 1.5s linear infinite; }
         @keyframes glitch {
             0% { transform: translate(0); }
@@ -88,30 +117,30 @@
             6% { transform: translate(0); text-shadow: none; }
         }
 
-        /* Scanline effect moved to background only to ensure text clarity */
+        /* Scanline effect */
         .bg-pattern {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), 
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%),
                         linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
             background-size: 100% 4px, 3px 100%;
             z-index: 1;
             pointer-events: none;
         }
+        .theme-day .bg-pattern { opacity: 0.05; }
 
-        /* Ensure all text has priority over patterns */
         #root {
             position: relative;
             z-index: 10;
         }
 
         ::-webkit-scrollbar { width: 12px; }
-        ::-webkit-scrollbar-track { background: #000; }
-        ::-webkit-scrollbar-thumb { background: #fff; border: 4px solid #000; }
+        ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+        ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: 4px solid var(--scrollbar-track); }
 
         select.brutal-input {
             appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='white' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5H7z'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='currentColor' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5H7z'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
             background-position: right 1rem center;
             background-size: 1.5rem;
@@ -128,6 +157,56 @@
         }
         .team-card {
             scroll-snap-align: start;
+        }
+
+        /* 진도율 바 - 팀이 좀비에게 다가가는 애니메이션 */
+        .progress-track {
+            position: relative;
+            height: 80px;
+            border: 4px solid var(--border-primary);
+            overflow: hidden;
+        }
+        .progress-fill {
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            transition: width 1s linear;
+        }
+        .progress-icon-team {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            transition: left 1s linear;
+            z-index: 3;
+            font-size: 36px;
+            filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.5));
+        }
+        .progress-icon-zombie {
+            position: absolute;
+            top: 50%;
+            right: 12px;
+            transform: translateY(-50%);
+            z-index: 3;
+            font-size: 42px;
+            filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.5));
+        }
+        @keyframes zombie-shake {
+            0%, 100% { transform: translateY(-50%) rotate(0deg); }
+            25% { transform: translateY(-50%) rotate(-3deg); }
+            75% { transform: translateY(-50%) rotate(3deg); }
+        }
+        .progress-icon-zombie { animation: zombie-shake 2s ease-in-out infinite; }
+        @keyframes team-walk {
+            0%, 100% { transform: translateY(-50%) scaleX(1); }
+            50% { transform: translateY(-52%) scaleX(1); }
+        }
+        .progress-icon-team { animation: team-walk 0.8s ease-in-out infinite; }
+
+        /* 전체화면 */
+        .fullscreen-active {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 9999 !important;
+            overflow-y: auto !important;
         }
     </style>
 <script type="importmap">

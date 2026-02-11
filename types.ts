@@ -50,6 +50,8 @@ export interface Session {
   teamCount: number;
   isOpen: boolean;
   isMissionStarted: boolean; // 관리자가 미션 시작 버튼을 눌렀는지 여부
+  missionStartedAt: number; // 미션 시작 시각 (timestamp)
+  missionDuration: number; // 미션 진행 시간 (분)
   isResultReleased: boolean; // 관리자가 결과 발표 버튼을 눌렀는지 여부
   submissions: { [teamNumber: number]: SubmissionData }; // 조별 제출 데이터
   participants: Participant[]; // 접속자 명단
