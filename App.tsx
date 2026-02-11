@@ -46,6 +46,12 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // 관리자 대시보드 상태
+  const [adminView, setAdminView] = useState<'hub' | 'dashboard'>('hub');
+  const [expandedTeamMemo, setExpandedTeamMemo] = useState<number | null>(null);
+  const [showResultsTable, setShowResultsTable] = useState(false);
+  const [adminTeamMemos, setAdminTeamMemos] = useState<Record<number, string>>({});
+
   // Firebase 익명 인증 대기
   useEffect(() => {
     authReady
@@ -128,6 +134,24 @@ export default function App() {
     return () => unsubscribe();
   }, [userProfile.sessionId, userProfile.teamNumber]);
 
+  // 관리자: 전체 팀 메모 실시간 감시
+  useEffect(() => {
+    if (role !== 'ADMIN' || !activeSessionId || adminView !== 'dashboard') {
+      setAdminTeamMemos({});
+      return;
+    }
+
+    const memosRef = ref(database, `sessions/${activeSessionId}/memos`);
+    const unsubscribe = onValue(memosRef, (snapshot) => {
+      const data = snapshot.val();
+      setAdminTeamMemos(data || {});
+    }, (error) => {
+      console.error('관리자 메모 데이터 읽기 실패:', error);
+    });
+
+    return () => unsubscribe();
+  }, [role, activeSessionId, adminView]);
+
   // 메모 변경 시 Firebase에 저장 (디바운스 적용)
   const handleMemoChange = (newMemo: string) => {
     setMemo(newMemo);
@@ -174,6 +198,9 @@ export default function App() {
     try {
       await set(getSessionRef(sessionId), newSession);
       setActiveSessionId(sessionId);
+      setAdminView('dashboard');
+      setShowResultsTable(false);
+      setExpandedTeamMemo(null);
     } catch (err) {
       console.error('세션 생성 실패:', err);
       alert('세션 생성에 실패했습니다. Firebase 데이터베이스 규칙을 확인해주세요.');
@@ -302,6 +329,16 @@ export default function App() {
     );
   }, [activeSession, userProfile.teamNumber]);
 
+  // 정답 판별 헬퍼
+  const isTeamCorrect = (sub: SubmissionData) => {
+    return (
+      sub.day === CORRECT_ANSWER.day &&
+      sub.ampm === CORRECT_ANSWER.ampm &&
+      sub.hour === CORRECT_ANSWER.hour &&
+      sub.minute === CORRECT_ANSWER.minute
+    );
+  };
+
   // --- 관리자 뷰 ---
   const renderAdmin = () => {
     if (!isAdminAuth) {
@@ -325,102 +362,294 @@ export default function App() {
       );
     }
 
-    return (
-      <div className="p-6 max-w-4xl mx-auto animate-fade-in space-y-8 pb-32">
-        <div className="brutal-card bg-zinc-900 p-8 border-white shadow-[10px_10px_0px_#e11d48]">
-          <h2 className="text-2xl font-poster text-red-600 mb-6 tracking-tighter">세션 관리</h2>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            const fd = new FormData(e.currentTarget);
-            createSession(fd.get('name') as string, parseInt(fd.get('teams') as string));
-            e.currentTarget.reset();
-          }} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-mono text-zinc-400 font-bold">과정명</label>
-              <input name="name" required placeholder="교육 과정명을 입력하세요" className="brutal-input w-full text-base" />
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-1 space-y-1">
-                 <label className="text-[10px] font-mono text-zinc-400 font-bold">팀 수</label>
-                 <select name="teams" className="brutal-input w-full appearance-none text-base">
-                   {Array.from({length: 12}, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}개 팀</option>)}
-                 </select>
-              </div>
-              <button className="brutal-btn-red px-6 self-end h-[62px] text-lg">세션 생성</button>
-            </div>
-          </form>
-        </div>
+    // 대시보드 뷰: 선택한 세션의 전용 관리 화면
+    if (adminView === 'dashboard' && activeSessionId) {
+      const s = sessions.find(ss => ss.id === activeSessionId);
+      if (!s) {
+        setAdminView('hub');
+        return null;
+      }
 
-        <div className="space-y-6">
-          <div className="flex justify-between items-center px-1">
-            <h3 className="text-sm font-poster text-white tracking-[0.3em]">활성 세션 목록</h3>
-            <button onClick={() => setIsAdminAuth(false)} className="text-[10px] font-mono text-red-500 underline font-bold">로그아웃</button>
+      const submittedCount = Object.keys(s.submissions).length;
+      const totalParticipants = s.participants.length;
+
+      return (
+        <div className="animate-fade-in min-h-[calc(100vh-80px)] flex flex-col">
+          {/* 상단 바 */}
+          <div className="bg-zinc-950 border-b-4 border-zinc-800 px-6 py-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <button
+                  onClick={() => { setAdminView('hub'); setShowResultsTable(false); setExpandedTeamMemo(null); }}
+                  className="text-zinc-500 hover:text-white transition-colors font-mono text-sm font-bold shrink-0"
+                >
+                  &larr; 목록
+                </button>
+                <div className="min-w-0">
+                  <h2 className="font-poster text-2xl text-white truncate">{s.groupName}</h2>
+                  <div className="flex gap-3 items-center mt-1">
+                    <span className="font-mono text-[11px] text-zinc-400 font-bold">코드: <span className="text-white">{s.id}</span></span>
+                    <span className="font-mono text-[11px] text-zinc-400 font-bold">참가: <span className="text-white">{totalParticipants}명</span></span>
+                    <span className="font-mono text-[11px] text-zinc-400 font-bold">제출: <span className="text-emerald-400">{submittedCount}</span>/{s.teamCount}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => toggleSessionOpen(s.id)}
+                  className={`px-5 py-2.5 font-poster text-sm border-4 transition-all ${
+                    s.isOpen
+                      ? 'bg-emerald-600 border-emerald-400 text-white shadow-[4px_4px_0px_#000]'
+                      : 'bg-zinc-800 border-zinc-600 text-zinc-400 shadow-[4px_4px_0px_#000]'
+                  }`}
+                >
+                  {s.isOpen ? '입장 허용 중' : '입장 대기'}
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => resetSession(s.id)} className="px-3 py-2.5 font-mono text-[11px] font-bold bg-zinc-800 border-2 border-zinc-600 text-zinc-400 hover:text-white hover:border-white transition-colors">초기화</button>
+                  <button onClick={() => deleteSession(s.id)} className="px-3 py-2.5 font-mono text-[11px] font-bold bg-red-950 border-2 border-red-800 text-red-400 hover:text-white hover:border-red-500 transition-colors">삭제</button>
+                </div>
+              </div>
+            </div>
           </div>
-          {sessions.length === 0 && <div className="text-center py-20 border-4 border-zinc-800 text-zinc-600 font-mono text-sm font-bold">활성화된 세션이 없습니다</div>}
-          {sessions.map(s => (
-            <div key={s.id} className="brutal-card p-6 border-white bg-black space-y-6">
-              <div className="flex justify-between items-start">
-                <div>
-                   <h3 className="font-poster text-xl text-white mb-2">{s.groupName}</h3>
-                   <div className="flex flex-wrap gap-2 items-center">
-                     <span className="text-[10px] font-mono bg-zinc-800 text-zinc-200 px-2 py-0.5 border-2 border-zinc-600 font-bold">코드: {s.id}</span>
-                     <span className="text-[10px] font-mono bg-zinc-800 text-zinc-200 px-2 py-0.5 border-2 border-zinc-600 font-bold">{s.teamCount}개 팀</span>
-                     <span className="text-[10px] font-mono bg-zinc-800 text-zinc-200 px-2 py-0.5 border-2 border-zinc-600 font-bold">{Object.keys(s.submissions).length}건 제출</span>
-                   </div>
-                </div>
-                <div className={`w-5 h-5 border-4 border-white ${s.isOpen ? 'bg-green-500 animate-pulse' : 'bg-red-600'}`}></div>
-              </div>
 
-              {/* 실시간 접속 인원 명단 표시 */}
-              <div className="border-t-4 border-zinc-800 pt-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-poster text-zinc-400 tracking-widest">실시간 참가자</span>
-                  <span className="text-[10px] font-mono text-white bg-red-900 px-2 py-0.5 border border-red-700 font-bold">총 {s.participants.length}명</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {Array.from({length: s.teamCount}, (_, i) => i + 1).map(tNum => {
-                    const teamParticipants = s.participants.filter(p => p.teamNumber === tNum);
-                    const hasSubmitted = !!s.submissions[tNum];
-                    return (
-                      <div key={tNum} className={`p-2 border-2 ${hasSubmitted ? 'border-emerald-600 bg-emerald-950/20' : 'border-zinc-800 bg-zinc-950/50'} space-y-1`}>
-                        <div className="flex justify-between items-center border-b border-zinc-800 pb-1 mb-1">
-                          <span className="text-[10px] font-poster text-white">{tNum}팀</span>
-                          {hasSubmitted && <span className="text-[8px] font-mono text-emerald-400 font-bold">제출완료</span>}
+          {/* 메인 콘텐츠 */}
+          <div className="flex-1 p-6 overflow-y-auto">
+            <div className="max-w-7xl mx-auto space-y-6">
+
+              {/* 조별 현황 그리드 */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                {Array.from({length: s.teamCount}, (_, i) => i + 1).map(tNum => {
+                  const teamParticipants = s.participants.filter(p => p.teamNumber === tNum);
+                  const hasSubmitted = !!s.submissions[tNum];
+                  const isMemoOpen = expandedTeamMemo === tNum;
+                  const teamMemo = adminTeamMemos[tNum] || '';
+
+                  return (
+                    <div
+                      key={tNum}
+                      className={`border-4 transition-all ${
+                        hasSubmitted
+                          ? 'border-emerald-500 bg-emerald-950/30'
+                          : 'border-zinc-700 bg-zinc-900/50'
+                      }`}
+                    >
+                      {/* 팀 헤더 */}
+                      <div className={`px-3 py-2 flex justify-between items-center ${hasSubmitted ? 'bg-emerald-900/40' : 'bg-zinc-800/60'}`}>
+                        <span className="font-poster text-lg text-white">{tNum}팀</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] text-zinc-400 font-bold">{teamParticipants.length}명</span>
+                          {hasSubmitted && (
+                            <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                          )}
                         </div>
+                      </div>
+
+                      {/* 참가자 목록 */}
+                      <div className="px-3 py-3 min-h-[60px]">
                         {teamParticipants.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1.5">
                             {teamParticipants.map((p, idx) => (
-                              <span key={idx} className="text-[9px] font-mono bg-white text-black px-1.5 py-0.5 font-bold uppercase">
+                              <span key={idx} className="text-[11px] font-mono bg-white/10 text-white px-2 py-0.5 font-bold border border-white/20">
                                 {p.name}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-[8px] font-mono text-zinc-700 italic">비어있음</span>
+                          <span className="text-[11px] font-mono text-zinc-600 italic">대기 중</span>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* 메모 토글 */}
+                      <div className="border-t-2 border-zinc-700/50">
+                        <button
+                          onClick={() => setExpandedTeamMemo(isMemoOpen ? null : tNum)}
+                          className="w-full px-3 py-2 flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500 hover:text-white hover:bg-zinc-800/50 transition-all"
+                        >
+                          <span>팀 메모</span>
+                          <span>{isMemoOpen ? '▲' : '▼'}</span>
+                        </button>
+                        {isMemoOpen && (
+                          <div className="px-3 pb-3">
+                            <div className="bg-black border-2 border-zinc-700 p-2 max-h-32 overflow-y-auto">
+                              <pre className="text-[11px] font-mono text-green-400 whitespace-pre-wrap break-words leading-relaxed">
+                                {teamMemo || '(메모 없음)'}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <button onClick={() => toggleSessionOpen(s.id)} className={`brutal-btn py-3 text-xs ${s.isOpen ? 'bg-zinc-800 text-white' : 'bg-blue-600 text-white border-white'}`}>
-                  {s.isOpen ? '입장 마감' : '입장 허용'}
-                </button>
-                <button
-                  onClick={() => releaseResults(s.id)}
-                  disabled={s.isResultReleased}
-                  className={`brutal-btn py-3 text-xs ${s.isResultReleased ? 'opacity-30' : 'bg-emerald-600 text-white border-white'}`}
-                >
-                  {s.isResultReleased ? '발표 완료' : '결과 발표'}
-                </button>
-                <button onClick={() => resetSession(s.id)} className="brutal-btn py-3 text-xs bg-zinc-100">초기화</button>
-                <button onClick={() => deleteSession(s.id)} className="brutal-btn py-3 text-xs bg-red-800 text-white border-white">삭제</button>
+              {/* 하단 컨트롤 & 결과 영역 */}
+              <div className="border-t-4 border-zinc-800 pt-6 space-y-6">
+                <div className="flex flex-wrap gap-3 items-center">
+                  <button
+                    onClick={() => setShowResultsTable(!showResultsTable)}
+                    className={`px-6 py-3 font-poster text-base border-4 transition-all ${
+                      showResultsTable
+                        ? 'bg-white text-black border-black shadow-[4px_4px_0px_#e11d48]'
+                        : 'bg-zinc-900 text-white border-zinc-600 shadow-[4px_4px_0px_#000] hover:border-white'
+                    }`}
+                  >
+                    {showResultsTable ? '결과 닫기' : '조별 결과 보기'}
+                  </button>
+                  <button
+                    onClick={() => releaseResults(s.id)}
+                    disabled={s.isResultReleased}
+                    className={`px-6 py-3 font-poster text-base border-4 transition-all ${
+                      s.isResultReleased
+                        ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed'
+                        : 'bg-red-600 border-white text-white shadow-[4px_4px_0px_#000] hover:shadow-[6px_6px_0px_#000]'
+                    }`}
+                  >
+                    {s.isResultReleased ? '결과 공유 완료' : '결과 공유'}
+                  </button>
+                  {s.isResultReleased && (
+                    <span className="font-mono text-[11px] text-emerald-400 font-bold animate-pulse">학습자 화면에 결과가 표시되었습니다</span>
+                  )}
+                </div>
+
+                {/* 결과 테이블 */}
+                {showResultsTable && (
+                  <div className="animate-fade-in">
+                    <div className="border-4 border-white bg-zinc-950 overflow-hidden">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-zinc-800">
+                            <th className="px-4 py-3 text-left font-poster text-sm text-white border-b-4 border-zinc-700">팀</th>
+                            <th className="px-4 py-3 text-center font-poster text-sm text-white border-b-4 border-zinc-700">요일</th>
+                            <th className="px-4 py-3 text-center font-poster text-sm text-white border-b-4 border-zinc-700">오전/오후</th>
+                            <th className="px-4 py-3 text-center font-poster text-sm text-white border-b-4 border-zinc-700">시간</th>
+                            <th className="px-4 py-3 text-center font-poster text-sm text-white border-b-4 border-zinc-700">제출자</th>
+                            <th className="px-4 py-3 text-center font-poster text-sm text-white border-b-4 border-zinc-700">결과</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Array.from({length: s.teamCount}, (_, i) => i + 1).map(tNum => {
+                            const sub = s.submissions[tNum];
+                            const correct = sub ? isTeamCorrect(sub) : false;
+                            return (
+                              <tr key={tNum} className={`border-b-2 border-zinc-800 ${sub ? (correct ? 'bg-emerald-950/20' : 'bg-red-950/20') : 'bg-zinc-900/30'}`}>
+                                <td className="px-4 py-3 font-poster text-lg text-white">{tNum}팀</td>
+                                {sub ? (
+                                  <>
+                                    <td className="px-4 py-3 text-center font-mono text-sm text-white font-bold">{sub.day}</td>
+                                    <td className="px-4 py-3 text-center font-mono text-sm text-white font-bold">{sub.ampm}</td>
+                                    <td className="px-4 py-3 text-center font-mono text-sm text-white font-bold">{sub.hour}:{sub.minute}</td>
+                                    <td className="px-4 py-3 text-center font-mono text-[11px] text-zinc-400 font-bold">{sub.userName}</td>
+                                    <td className="px-4 py-3 text-center">
+                                      {correct ? (
+                                        <span className="inline-block px-3 py-1 bg-emerald-600 text-white font-poster text-sm border-2 border-emerald-400">임무 성공</span>
+                                      ) : (
+                                        <span className="inline-block px-3 py-1 bg-red-700 text-white font-poster text-sm border-2 border-red-500">다음 기회에</span>
+                                      )}
+                                    </td>
+                                  </>
+                                ) : (
+                                  <td colSpan={5} className="px-4 py-3 text-center font-mono text-sm text-zinc-600 italic">미제출</td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {/* 정답 표시 */}
+                      <div className="bg-zinc-800 px-4 py-3 flex justify-between items-center border-t-4 border-zinc-700">
+                        <span className="font-mono text-[11px] text-zinc-400 font-bold">정답</span>
+                        <span className="font-mono text-sm text-yellow-400 font-bold">
+                          {CORRECT_ANSWER.day} {CORRECT_ANSWER.ampm} {CORRECT_ANSWER.hour}:{CORRECT_ANSWER.minute}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          ))}
+          </div>
         </div>
+      );
+    }
+
+    // 허브 뷰: 세션 목록 + 생성
+    return (
+      <div className="p-6 max-w-5xl mx-auto animate-fade-in space-y-8 pb-32">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-poster text-white tracking-tighter">세션 관리</h2>
+          <button onClick={() => setIsAdminAuth(false)} className="font-mono text-[11px] text-red-500 underline font-bold">로그아웃</button>
+        </div>
+
+        {/* 세션 생성 폼 */}
+        <div className="border-4 border-zinc-700 bg-zinc-900 p-6">
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            createSession(fd.get('name') as string, parseInt(fd.get('teams') as string));
+            e.currentTarget.reset();
+          }} className="flex items-end gap-4">
+            <div className="flex-1 space-y-1">
+              <label className="text-[10px] font-mono text-zinc-400 font-bold">과정명</label>
+              <input name="name" required placeholder="교육 과정명을 입력하세요" className="brutal-input w-full text-base py-3" />
+            </div>
+            <div className="w-32 space-y-1">
+              <label className="text-[10px] font-mono text-zinc-400 font-bold">팀 수</label>
+              <select name="teams" className="brutal-input w-full appearance-none text-base py-3">
+                {Array.from({length: 12}, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}개 팀</option>)}
+              </select>
+            </div>
+            <button className="brutal-btn-red px-8 py-3 text-lg shrink-0 h-[54px]">새 세션</button>
+          </form>
+        </div>
+
+        {/* 세션 목록 */}
+        {sessions.length === 0 ? (
+          <div className="text-center py-20 border-4 border-dashed border-zinc-800 text-zinc-600 font-mono text-sm font-bold">활성화된 세션이 없습니다</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sessions.map(s => {
+              const submittedCount = Object.keys(s.submissions).length;
+              return (
+                <div
+                  key={s.id}
+                  onClick={() => { setActiveSessionId(s.id); setAdminView('dashboard'); setShowResultsTable(false); setExpandedTeamMemo(null); }}
+                  className="border-4 border-zinc-700 bg-zinc-900 p-5 cursor-pointer hover:border-white hover:shadow-[6px_6px_0px_#e11d48] transition-all space-y-4 group"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-poster text-xl text-white group-hover:text-red-500 transition-colors">{s.groupName}</h3>
+                      <span className="font-mono text-[11px] text-zinc-500 font-bold">코드: {s.id}</span>
+                    </div>
+                    <div className={`w-4 h-4 border-2 border-white ${s.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-600'}`}></div>
+                  </div>
+
+                  <div className="flex gap-4 font-mono text-[11px]">
+                    <div className="text-zinc-400 font-bold">
+                      팀: <span className="text-white">{s.teamCount}개</span>
+                    </div>
+                    <div className="text-zinc-400 font-bold">
+                      참가: <span className="text-white">{s.participants.length}명</span>
+                    </div>
+                    <div className="text-zinc-400 font-bold">
+                      제출: <span className={submittedCount === s.teamCount ? 'text-emerald-400' : 'text-yellow-400'}>{submittedCount}/{s.teamCount}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-2 border-t-2 border-zinc-800">
+                    <span className={`font-mono text-[10px] font-bold ${s.isOpen ? 'text-emerald-500' : 'text-zinc-600'}`}>
+                      {s.isOpen ? '입장 허용 중' : '입장 대기'}
+                    </span>
+                    <span className="font-mono text-[10px] text-zinc-500 font-bold group-hover:text-white transition-colors">
+                      클릭하여 관리 &rarr;
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
