@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { GamePhase, UserRole, UserProfile, Session, Clue, SubmissionData, Participant } from './types';
+import { GamePhase, UserRole, UserProfile, Session, Clue, SubmissionData, Participant, ChatEntry } from './types';
 import { CLUES } from './constants';
 import { sessionsRef, getSessionRef, onValue, set, remove, update, database, ref, authReady } from './firebase';
 
@@ -46,6 +46,14 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // 학습자 채팅 & 참가자ID 상태
+  const [participantId, setParticipantId] = useState<string>('');
+  const [chatMessage, setChatMessage] = useState('');
+  const [liveChatEntries, setLiveChatEntries] = useState<Record<string, ChatEntry>>({});
+  const chatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
+
   // 관리자 대시보드 상태
   const [adminView, setAdminView] = useState<'hub' | 'dashboard'>('hub');
   const [expandedTeamMemo, setExpandedTeamMemo] = useState<number | null>(null);
@@ -74,7 +82,9 @@ export default function App() {
           ...data[key],
           id: key,
           participants: data[key].participants ? Object.values(data[key].participants) : [],
-          submissions: data[key].submissions || {}
+          submissions: data[key].submissions || {},
+          isMissionStarted: data[key].isMissionStarted || false,
+          liveChat: data[key].liveChat || {}
         }));
         setSessions(sessionsArray);
       } else {
@@ -134,6 +144,24 @@ export default function App() {
     return () => unsubscribe();
   }, [userProfile.sessionId, userProfile.teamNumber]);
 
+  // 학습자: 실시간 채팅 동기화
+  useEffect(() => {
+    if (!userProfile.sessionId || !isAuthReady) {
+      setLiveChatEntries({});
+      return;
+    }
+
+    const chatRef = ref(database, `sessions/${userProfile.sessionId}/liveChat`);
+    const unsubscribe = onValue(chatRef, (snapshot) => {
+      const data = snapshot.val();
+      setLiveChatEntries(data || {});
+    }, (error) => {
+      console.error('채팅 데이터 읽기 실패:', error);
+    });
+
+    return () => unsubscribe();
+  }, [userProfile.sessionId, isAuthReady]);
+
   // 관리자: 전체 팀 메모 실시간 감시
   useEffect(() => {
     if (role !== 'ADMIN' || !activeSessionId || adminView !== 'dashboard') {
@@ -188,6 +216,31 @@ export default function App() {
     }, 300);
   };
 
+  // 채팅 메시지 변경 핸들러 (디바운스)
+  const handleChatChange = (newMessage: string) => {
+    setChatMessage(newMessage);
+
+    if (chatTimeoutRef.current) {
+      clearTimeout(chatTimeoutRef.current);
+    }
+
+    chatTimeoutRef.current = setTimeout(async () => {
+      if (userProfile.sessionId && participantId) {
+        try {
+          await update(getSessionRef(userProfile.sessionId), {
+            [`liveChat/${participantId}`]: {
+              name: userProfile.name,
+              teamNumber: userProfile.teamNumber,
+              message: newMessage
+            }
+          });
+        } catch (err) {
+          console.error('채팅 저장 실패:', err);
+        }
+      }
+    }, 300);
+  };
+
   const activeSession = sessions.find(s => s.id === (role === 'ADMIN' ? activeSessionId : userProfile.sessionId));
 
   const myClues = useMemo(() => {
@@ -202,9 +255,11 @@ export default function App() {
       groupName: name,
       teamCount: teams,
       isOpen: false,
+      isMissionStarted: false,
       isResultReleased: false,
       submissions: {},
       participants: {},
+      liveChat: {},
       createdAt: Date.now()
     };
 
@@ -232,7 +287,7 @@ export default function App() {
     );
 
     if (!alreadyJoined) {
-      const participantId = Date.now().toString();
+      const newId = Date.now().toString();
       const newParticipant: Participant = {
         name: userProfile.name,
         teamNumber: userProfile.teamNumber,
@@ -241,15 +296,22 @@ export default function App() {
 
       try {
         await update(getSessionRef(userProfile.sessionId), {
-          [`participants/${participantId}`]: newParticipant
+          [`participants/${newId}`]: newParticipant
         });
+        setParticipantId(newId);
       } catch (err) {
         console.error('참가자 등록 실패:', err);
         alert('참가 등록에 실패했습니다. 다시 시도해주세요.');
         return;
       }
+    } else {
+      // 이미 등록된 경우 기존 ID 재사용 또는 새 ID 생성
+      if (!participantId) {
+        setParticipantId(Date.now().toString());
+      }
     }
 
+    setChatMessage('');
     setPhase(GamePhase.STORY);
   };
 
@@ -305,12 +367,23 @@ export default function App() {
     }
   };
 
+  const startMission = async (id: string) => {
+    try {
+      await update(getSessionRef(id), { isMissionStarted: true });
+    } catch (err) {
+      console.error('미션 시작 실패:', err);
+      alert('미션 시작에 실패했습니다.');
+    }
+  };
+
   const resetSession = async (id: string) => {
     try {
       await update(getSessionRef(id), {
+        isMissionStarted: false,
         isResultReleased: false,
         submissions: {},
-        participants: {}
+        participants: {},
+        liveChat: {}
       });
     } catch (err) {
       console.error('세션 초기화 실패:', err);
@@ -413,7 +486,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
                 <button
                   onClick={() => toggleSessionOpen(s.id)}
                   className={`px-5 py-2.5 font-poster text-sm border-4 transition-all ${
@@ -423,6 +496,17 @@ export default function App() {
                   }`}
                 >
                   {s.isOpen ? '입장 허용 중' : '입장 대기'}
+                </button>
+                <button
+                  onClick={() => startMission(s.id)}
+                  disabled={s.isMissionStarted}
+                  className={`px-5 py-2.5 font-poster text-sm border-4 transition-all ${
+                    s.isMissionStarted
+                      ? 'bg-yellow-900 border-yellow-700 text-yellow-500 cursor-not-allowed shadow-[4px_4px_0px_#000]'
+                      : 'bg-yellow-500 border-white text-black shadow-[4px_4px_0px_#000] hover:shadow-[6px_6px_0px_#000] hover:bg-yellow-400 animate-pulse'
+                  }`}
+                >
+                  {s.isMissionStarted ? '미션 진행 중' : '미션 시작'}
                 </button>
                 <div className="flex gap-2">
                   <button onClick={() => resetSession(s.id)} className="px-3 py-2.5 font-mono text-[11px] font-bold bg-zinc-800 border-2 border-zinc-600 text-zinc-400 hover:text-white hover:border-white transition-colors">초기화</button>
@@ -754,94 +838,280 @@ export default function App() {
     </div>
   );
 
-  const renderStudentMain = () => (
-    <div className="max-w-md mx-auto px-5 py-8 pb-48 animate-fade-in space-y-10">
-      <button type="button" onClick={() => setPhase(GamePhase.STORY)} className="text-[10px] font-mono text-zinc-600 underline font-bold">&larr; 스토리로 돌아가기</button>
-      <div className="brutal-card p-6 border-white bg-black flex items-center justify-between shadow-[8px_8px_0px_#e11d48]">
-         <div>
-            <span className="text-[10px] font-mono text-zinc-500 block font-bold">이름</span>
-            <span className="text-2xl font-poster text-white">{userProfile.name}</span>
-         </div>
-         <div className="text-right">
-            <span className="text-[10px] font-mono text-red-600 block font-bold">소속 팀</span>
-            <span className="text-5xl font-poster text-red-700 leading-none">{userProfile.teamNumber}</span>
-         </div>
-      </div>
+  const renderStudentMain = () => {
+    const isMissionOn = activeSession?.isMissionStarted || false;
+    const allParticipants = activeSession?.participants || [];
+    const teamCount = activeSession?.teamCount || 1;
 
-      <div className="space-y-6">
-        <div className="flex justify-between items-end">
-           <h3 className="text-sm font-poster text-white tracking-[0.2em] flex items-center gap-2">
-             <span className="w-3 h-3 bg-red-600 animate-pulse border-2 border-white"></span>
-             정보 카드
-           </h3>
-           <button
-             onClick={() => setIsViewAllMode(!isViewAllMode)}
-             className={`px-3 py-1 font-mono text-[10px] border-4 transition-all font-bold ${isViewAllMode ? 'bg-white text-black border-black shadow-[2px_2px_0px_#e11d48]' : 'bg-black text-zinc-500 border-zinc-800'}`}
-           >
-             {isViewAllMode ? '우리 팀만 보기' : '전체 보기'}
-           </button>
+    // 카루셀 스크롤 핸들러
+    const scrollToCard = (index: number) => {
+      if (carouselRef.current) {
+        const cardWidth = carouselRef.current.children[0]?.clientWidth || 0;
+        carouselRef.current.scrollTo({ left: cardWidth * index, behavior: 'smooth' });
+        setActiveCardIndex(index);
+      }
+    };
+
+    const handleCarouselScroll = () => {
+      if (carouselRef.current) {
+        const scrollLeft = carouselRef.current.scrollLeft;
+        const cardWidth = carouselRef.current.children[0]?.clientWidth || 1;
+        setActiveCardIndex(Math.round(scrollLeft / cardWidth));
+      }
+    };
+
+    // 채팅 엔트리를 팀별로 그룹화
+    const chatEntries = Object.entries(liveChatEntries).filter(([, e]) => e.message?.trim());
+
+    return (
+      <div className="max-w-md mx-auto px-5 py-8 pb-48 animate-fade-in space-y-10">
+        <button type="button" onClick={() => setPhase(GamePhase.STORY)} className="text-[10px] font-mono text-zinc-600 underline font-bold">&larr; 스토리로 돌아가기</button>
+        <div className="brutal-card p-6 border-white bg-black flex items-center justify-between shadow-[8px_8px_0px_#e11d48]">
+           <div>
+              <span className="text-[10px] font-mono text-zinc-500 block font-bold">이름</span>
+              <span className="text-2xl font-poster text-white">{userProfile.name}</span>
+           </div>
+           <div className="text-right">
+              <span className="text-[10px] font-mono text-red-600 block font-bold">소속 팀</span>
+              <span className="text-5xl font-poster text-red-700 leading-none">{userProfile.teamNumber}</span>
+           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          {myClues.map(clue => (
-            <div
-              key={clue.id}
-              onClick={() => setSelectedClue(clue)}
-              className="relative aspect-square bg-black border-4 border-zinc-800 cursor-pointer hover:border-white transition-all overflow-hidden group active:scale-95 shadow-[4px_4px_0px_rgba(0,0,0,0.5)]"
-            >
-              <img src={clue.imageUrl} alt={clue.label} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all duration-300" />
-              <div className="absolute bottom-1 left-1 bg-black/90 px-1 font-mono text-[10px] text-white border-2 border-white/50 font-bold">
-                {clue.label}
-              </div>
+        {/* 조별 정보카드 카루셀 - 미션 시작 시에만 표시 */}
+        {isMissionOn && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-yellow-500 animate-pulse border-2 border-white"></span>
+              <h3 className="text-sm font-poster text-white tracking-[0.2em]">조별 현황</h3>
+              <span className="text-[10px] font-mono text-yellow-500 ml-auto font-bold">좌우 스와이프</span>
             </div>
-          ))}
-        </div>
-      </div>
 
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-sm font-poster text-white tracking-[0.2em]">팀 공유 메모</h3>
-          <span className="text-[10px] font-mono text-green-500 animate-pulse">● 실시간 동기화</span>
-        </div>
-        <div className="brutal-card p-1 border-white shadow-none">
-          <textarea
-            value={memo}
-            onChange={(e) => handleMemoChange(e.target.value)}
-            placeholder="팀원들과 실시간 공유됩니다. 다른 팀에서 받은 정보를 기록하세요..."
-            className="w-full h-64 bg-black p-5 text-base text-green-500 font-mono outline-none resize-none placeholder:text-zinc-800 border-none font-bold"
-          />
-        </div>
-      </div>
-
-      <div className="fixed bottom-10 left-0 right-0 px-6 max-w-md mx-auto z-[80]">
-        <button
-          onClick={() => setPhase(GamePhase.SUBMIT)}
-          className="brutal-btn w-full py-6 text-3xl shadow-[8px_8px_0px_#000]"
-        >
-          답안 제출하기
-        </button>
-      </div>
-
-      {selectedClue && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/98 backdrop-blur-xl">
-          <div className="brutal-card p-2 border-white w-full max-w-sm animate-scale-in relative">
-            <button
-              onClick={() => setSelectedClue(null)}
-              className="absolute -top-4 -right-4 w-12 h-12 brutal-btn-red flex items-center justify-center text-3xl font-poster z-50"
+            {/* 카루셀 컨테이너 */}
+            <div
+              ref={carouselRef}
+              onScroll={handleCarouselScroll}
+              className="team-carousel flex gap-4 overflow-x-auto pb-4 -mx-2 px-2"
             >
-              X
-            </button>
-            <img src={selectedClue.imageUrl} alt={selectedClue.label} className="w-full h-auto border-4 border-black" />
-            <div className="bg-black text-white p-4 mt-2 font-poster flex justify-between items-center border-t-4 border-white">
-               <span className="text-3xl uppercase tracking-tighter">{selectedClue.label}</span>
-               <span className="font-mono text-[10px] text-red-600 font-bold">정보 카드</span>
+              {Array.from({length: teamCount}, (_, i) => i + 1).map(tNum => {
+                const teamMembers = allParticipants.filter(p => p.teamNumber === tNum);
+                const isMyTeam = tNum === userProfile.teamNumber;
+                const hasSubmitted = !!activeSession?.submissions[tNum];
+
+                return (
+                  <div
+                    key={tNum}
+                    className={`team-card flex-shrink-0 w-[85%] border-4 transition-all ${
+                      isMyTeam
+                        ? 'border-red-500 bg-red-950/40 shadow-[6px_6px_0px_#e11d48]'
+                        : hasSubmitted
+                          ? 'border-emerald-500 bg-emerald-950/30 shadow-[4px_4px_0px_#000]'
+                          : 'border-zinc-600 bg-zinc-900/60 shadow-[4px_4px_0px_#000]'
+                    }`}
+                  >
+                    {/* 카드 헤더 */}
+                    <div className={`px-4 py-3 flex justify-between items-center ${
+                      isMyTeam ? 'bg-red-900/50' : hasSubmitted ? 'bg-emerald-900/40' : 'bg-zinc-800/60'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <span className="font-poster text-2xl text-white">{tNum}팀</span>
+                        {isMyTeam && (
+                          <span className="text-[9px] font-mono bg-red-600 text-white px-2 py-0.5 border-2 border-white font-bold">MY TEAM</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-zinc-400 font-bold">{teamMembers.length}명</span>
+                        {hasSubmitted && (
+                          <span className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 카드 내용 - 참가자 목록 */}
+                    <div className="px-4 py-4 min-h-[80px]">
+                      {teamMembers.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {teamMembers.map((p, idx) => (
+                            <span
+                              key={idx}
+                              className={`text-[12px] font-mono px-3 py-1 font-bold border-2 ${
+                                p.name === userProfile.name && isMyTeam
+                                  ? 'bg-red-600 text-white border-white'
+                                  : 'bg-white/10 text-white border-white/20'
+                              }`}
+                            >
+                              {p.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] font-mono text-zinc-600 italic">대기 중...</span>
+                      )}
+                    </div>
+
+                    {/* 카드 하단 상태 */}
+                    <div className={`px-4 py-2 border-t-2 ${isMyTeam ? 'border-red-800' : 'border-zinc-700'}`}>
+                      <span className={`text-[10px] font-mono font-bold ${
+                        hasSubmitted ? 'text-emerald-400' : 'text-zinc-500'
+                      }`}>
+                        {hasSubmitted ? '답안 제출 완료' : '분석 진행 중...'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 카루셀 인디케이터 */}
+            <div className="flex justify-center gap-2">
+              {Array.from({length: teamCount}, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => scrollToCard(i)}
+                  className={`transition-all ${
+                    activeCardIndex === i
+                      ? 'w-8 h-2 bg-red-500'
+                      : 'w-2 h-2 bg-zinc-700 hover:bg-zinc-500'
+                  }`}
+                />
+              ))}
             </div>
           </div>
-          <div className="absolute inset-0 z-[-1]" onClick={() => setSelectedClue(null)}></div>
+        )}
+
+        <div className="space-y-6">
+          <div className="flex justify-between items-end">
+             <h3 className="text-sm font-poster text-white tracking-[0.2em] flex items-center gap-2">
+               <span className="w-3 h-3 bg-red-600 animate-pulse border-2 border-white"></span>
+               정보 카드
+             </h3>
+             <button
+               onClick={() => setIsViewAllMode(!isViewAllMode)}
+               className={`px-3 py-1 font-mono text-[10px] border-4 transition-all font-bold ${isViewAllMode ? 'bg-white text-black border-black shadow-[2px_2px_0px_#e11d48]' : 'bg-black text-zinc-500 border-zinc-800'}`}
+             >
+               {isViewAllMode ? '우리 팀만 보기' : '전체 보기'}
+             </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {myClues.map(clue => (
+              <div
+                key={clue.id}
+                onClick={() => setSelectedClue(clue)}
+                className="relative aspect-square bg-black border-4 border-zinc-800 cursor-pointer hover:border-white transition-all overflow-hidden group active:scale-95 shadow-[4px_4px_0px_rgba(0,0,0,0.5)]"
+              >
+                <img src={clue.imageUrl} alt={clue.label} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all duration-300" />
+                <div className="absolute bottom-1 left-1 bg-black/90 px-1 font-mono text-[10px] text-white border-2 border-white/50 font-bold">
+                  {clue.label}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
-    </div>
-  );
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-poster text-white tracking-[0.2em]">팀 공유 메모</h3>
+            <span className="text-[10px] font-mono text-green-500 animate-pulse">● 실시간 동기화</span>
+          </div>
+          <div className="brutal-card p-1 border-white shadow-none">
+            <textarea
+              value={memo}
+              onChange={(e) => handleMemoChange(e.target.value)}
+              placeholder="팀원들과 실시간 공유됩니다. 다른 팀에서 받은 정보를 기록하세요..."
+              className="w-full h-64 bg-black p-5 text-base text-green-500 font-mono outline-none resize-none placeholder:text-zinc-800 border-none font-bold"
+            />
+          </div>
+        </div>
+
+        {/* 실시간 채팅 - 미션 시작 시에만 표시 */}
+        {isMissionOn && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-poster text-white tracking-[0.2em] flex items-center gap-2">
+                <span className="w-3 h-3 bg-blue-500 animate-pulse border-2 border-white"></span>
+                실시간 소통
+              </h3>
+              <span className="text-[10px] font-mono text-blue-400 font-bold">{Object.keys(liveChatEntries).length}명 접속</span>
+            </div>
+
+            {/* 나의 입력칸 */}
+            <div className="border-4 border-blue-500 bg-blue-950/30 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono font-bold bg-blue-600 text-white px-2 py-0.5 border-2 border-white">{userProfile.name}</span>
+                <span className="text-[10px] font-mono text-blue-400 font-bold">{userProfile.teamNumber}팀</span>
+              </div>
+              <textarea
+                value={chatMessage}
+                onChange={(e) => handleChatChange(e.target.value)}
+                placeholder="동료들에게 메시지를 남기세요..."
+                className="w-full h-20 bg-black/60 p-3 text-sm text-blue-300 font-mono outline-none resize-none placeholder:text-zinc-700 border-2 border-blue-800 focus:border-blue-400 transition-colors font-bold"
+              />
+            </div>
+
+            {/* 다른 사람들의 메시지 */}
+            {chatEntries.length > 0 && (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {chatEntries
+                  .filter(([id]) => id !== participantId)
+                  .map(([id, entry]) => (
+                    <div
+                      key={id}
+                      className={`border-2 p-3 space-y-1 ${
+                        entry.teamNumber === userProfile.teamNumber
+                          ? 'border-red-800 bg-red-950/20'
+                          : 'border-zinc-700 bg-zinc-900/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 border ${
+                          entry.teamNumber === userProfile.teamNumber
+                            ? 'bg-red-900/50 text-red-300 border-red-700'
+                            : 'bg-zinc-800 text-zinc-300 border-zinc-600'
+                        }`}>
+                          {entry.name}
+                        </span>
+                        <span className="text-[10px] font-mono text-zinc-500 font-bold">{entry.teamNumber}팀</span>
+                      </div>
+                      <p className="text-sm font-mono text-zinc-300 whitespace-pre-wrap break-words leading-relaxed pl-1 font-bold">
+                        {entry.message}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="fixed bottom-10 left-0 right-0 px-6 max-w-md mx-auto z-[80]">
+          <button
+            onClick={() => setPhase(GamePhase.SUBMIT)}
+            className="brutal-btn w-full py-6 text-3xl shadow-[8px_8px_0px_#000]"
+          >
+            답안 제출하기
+          </button>
+        </div>
+
+        {selectedClue && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/98 backdrop-blur-xl">
+            <div className="brutal-card p-2 border-white w-full max-w-sm animate-scale-in relative">
+              <button
+                onClick={() => setSelectedClue(null)}
+                className="absolute -top-4 -right-4 w-12 h-12 brutal-btn-red flex items-center justify-center text-3xl font-poster z-50"
+              >
+                X
+              </button>
+              <img src={selectedClue.imageUrl} alt={selectedClue.label} className="w-full h-auto border-4 border-black" />
+              <div className="bg-black text-white p-4 mt-2 font-poster flex justify-between items-center border-t-4 border-white">
+                 <span className="text-3xl uppercase tracking-tighter">{selectedClue.label}</span>
+                 <span className="font-mono text-[10px] text-red-600 font-bold">정보 카드</span>
+              </div>
+            </div>
+            <div className="absolute inset-0 z-[-1]" onClick={() => setSelectedClue(null)}></div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderSubmitForm = () => (
     <div className="max-w-md mx-auto px-6 py-12 animate-fade-in space-y-10">

@@ -116,6 +116,19 @@
             background-position: right 1rem center;
             background-size: 1.5rem;
         }
+
+        /* 카루셀 스크롤 스냅 */
+        .team-carousel {
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .team-carousel::-webkit-scrollbar {
+            display: none;
+        }
+        .team-card {
+            scroll-snap-align: start;
+        }
     </style>
 <script type="importmap">
 {
