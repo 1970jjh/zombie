@@ -74,6 +74,8 @@ export default function App() {
       } else {
         setSessions([]);
       }
+    }, (error) => {
+      console.error('세션 데이터 읽기 실패:', error);
     });
 
     return () => unsubscribe();
@@ -119,6 +121,8 @@ export default function App() {
       const data = snapshot.val();
       // 데이터가 있으면 설정, 없으면 빈 문자열 유지
       setMemo(data || '');
+    }, (error) => {
+      console.error('메모 데이터 읽기 실패:', error);
     });
 
     return () => unsubscribe();
@@ -136,9 +140,13 @@ export default function App() {
     // 300ms 후에 Firebase에 저장 (더 빠른 동기화)
     memoTimeoutRef.current = setTimeout(async () => {
       if (userProfile.sessionId && userProfile.teamNumber) {
-        await update(getSessionRef(userProfile.sessionId), {
-          [`memos/${userProfile.teamNumber}`]: newMemo
-        });
+        try {
+          await update(getSessionRef(userProfile.sessionId), {
+            [`memos/${userProfile.teamNumber}`]: newMemo
+          });
+        } catch (err) {
+          console.error('메모 저장 실패:', err);
+        }
       }
     }, 300);
   };
@@ -163,8 +171,13 @@ export default function App() {
       createdAt: Date.now()
     };
 
-    await set(getSessionRef(sessionId), newSession);
-    setActiveSessionId(sessionId);
+    try {
+      await set(getSessionRef(sessionId), newSession);
+      setActiveSessionId(sessionId);
+    } catch (err) {
+      console.error('세션 생성 실패:', err);
+      alert('세션 생성에 실패했습니다. Firebase 데이터베이스 규칙을 확인해주세요.');
+    }
   };
 
   const registerParticipant = async () => {
@@ -186,9 +199,15 @@ export default function App() {
         joinedAt: Date.now()
       };
 
-      await update(getSessionRef(userProfile.sessionId), {
-        [`participants/${participantId}`]: newParticipant
-      });
+      try {
+        await update(getSessionRef(userProfile.sessionId), {
+          [`participants/${participantId}`]: newParticipant
+        });
+      } catch (err) {
+        console.error('참가자 등록 실패:', err);
+        alert('참가 등록에 실패했습니다. 다시 시도해주세요.');
+        return;
+      }
     }
 
     setPhase(GamePhase.STORY);
@@ -214,35 +233,59 @@ export default function App() {
       userName: userProfile.name
     };
 
-    await update(getSessionRef(userProfile.sessionId), {
-      [`submissions/${userProfile.teamNumber}`]: newSubmission
-    });
-
-    setPhase(GamePhase.CHECKING);
+    try {
+      await update(getSessionRef(userProfile.sessionId), {
+        [`submissions/${userProfile.teamNumber}`]: newSubmission
+      });
+      setPhase(GamePhase.CHECKING);
+    } catch (err) {
+      console.error('제출 실패:', err);
+      alert('답안 제출에 실패했습니다. 다시 시도해주세요.');
+    }
   };
 
   const toggleSessionOpen = async (id: string) => {
     const session = sessions.find(s => s.id === id);
     if (session) {
-      await update(getSessionRef(id), { isOpen: !session.isOpen });
+      try {
+        await update(getSessionRef(id), { isOpen: !session.isOpen });
+      } catch (err) {
+        console.error('세션 상태 변경 실패:', err);
+        alert('세션 상태 변경에 실패했습니다.');
+      }
     }
   };
 
   const releaseResults = async (id: string) => {
-    await update(getSessionRef(id), { isResultReleased: true });
+    try {
+      await update(getSessionRef(id), { isResultReleased: true });
+    } catch (err) {
+      console.error('결과 발표 실패:', err);
+      alert('결과 발표에 실패했습니다.');
+    }
   };
 
   const resetSession = async (id: string) => {
-    await update(getSessionRef(id), {
-      isResultReleased: false,
-      submissions: {},
-      participants: {}
-    });
+    try {
+      await update(getSessionRef(id), {
+        isResultReleased: false,
+        submissions: {},
+        participants: {}
+      });
+    } catch (err) {
+      console.error('세션 초기화 실패:', err);
+      alert('세션 초기화에 실패했습니다.');
+    }
   };
 
   const deleteSession = async (id: string) => {
     if (confirm('이 교육 그룹을 삭제하시겠습니까?')) {
-      await remove(getSessionRef(id));
+      try {
+        await remove(getSessionRef(id));
+      } catch (err) {
+        console.error('세션 삭제 실패:', err);
+        alert('세션 삭제에 실패했습니다.');
+      }
     }
   };
 
