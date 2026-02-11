@@ -18,6 +18,7 @@ export interface SubmissionData {
   hour: string;
   minute: string;
   userName: string;
+  submittedAt: number;
 }
 
 export interface Participant {
@@ -49,12 +50,29 @@ export interface Session {
   groupName: string;
   teamCount: number;
   isOpen: boolean;
-  isMissionStarted: boolean; // 관리자가 미션 시작 버튼을 눌렀는지 여부
-  missionStartedAt: number; // 미션 시작 시각 (timestamp)
-  missionDuration: number; // 미션 진행 시간 (분)
-  isResultReleased: boolean; // 관리자가 결과 발표 버튼을 눌렀는지 여부
-  submissions: { [teamNumber: number]: SubmissionData }; // 조별 제출 데이터
-  participants: Participant[]; // 접속자 명단
-  liveChat: { [participantId: string]: ChatEntry }; // 개인별 실시간 채팅
+  isMissionStarted: boolean;
+  missionStartedAt: number;
+  missionDuration: number;
+  // Communication round settings
+  teamInternalRounds: number;
+  teamCrossRounds: number;
+  roundDuration: number;
+  submitDuration: number;
+  // Answer reveal controls
+  isAnswerRevealed: boolean;
+  isSuccessRevealed: boolean;
+  isResultReleased: boolean;
+  submissions: { [teamNumber: number]: SubmissionData };
+  participants: Participant[];
+  liveChat: { [participantId: string]: ChatEntry };
   createdAt: number;
+}
+
+export interface MissionPhaseInfo {
+  type: 'TEAM_INTERNAL' | 'TEAM_CROSS' | 'SUBMIT';
+  index: number;
+  roundNumber: number;
+  totalPhases: number;
+  phaseRemaining: number;
+  phaseProgress: number;
 }
