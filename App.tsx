@@ -152,6 +152,19 @@ export default function App() {
     return () => unsubscribe();
   }, [role, activeSessionId, adminView]);
 
+  // 관리자: 대시보드에서 세션이 삭제되면 허브로 복귀
+  useEffect(() => {
+    if (role === 'ADMIN' && adminView === 'dashboard' && activeSessionId) {
+      const sessionExists = sessions.some(s => s.id === activeSessionId);
+      if (!sessionExists && sessions.length >= 0 && isAuthReady) {
+        setAdminView('hub');
+        setActiveSessionId(null);
+        setShowResultsTable(false);
+        setExpandedTeamMemo(null);
+      }
+    }
+  }, [sessions, role, adminView, activeSessionId, isAuthReady]);
+
   // 메모 변경 시 Firebase에 저장 (디바운스 적용)
   const handleMemoChange = (newMemo: string) => {
     setMemo(newMemo);
@@ -309,6 +322,12 @@ export default function App() {
     if (confirm('이 교육 그룹을 삭제하시겠습니까?')) {
       try {
         await remove(getSessionRef(id));
+        if (activeSessionId === id) {
+          setAdminView('hub');
+          setActiveSessionId(null);
+          setShowResultsTable(false);
+          setExpandedTeamMemo(null);
+        }
       } catch (err) {
         console.error('세션 삭제 실패:', err);
         alert('세션 삭제에 실패했습니다.');
@@ -366,7 +385,7 @@ export default function App() {
     if (adminView === 'dashboard' && activeSessionId) {
       const s = sessions.find(ss => ss.id === activeSessionId);
       if (!s) {
-        setAdminView('hub');
+        // useEffect에서 허브로 복귀 처리됨
         return null;
       }
 
@@ -916,7 +935,7 @@ export default function App() {
       </header>
 
       <main className="relative pb-10">
-        <div className="vignette"></div>
+        {role !== 'ADMIN' && <div className="vignette"></div>}
         {role === 'ADMIN' ? (
           renderAdmin()
         ) : (
