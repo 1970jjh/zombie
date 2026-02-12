@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { GamePhase, UserRole, UserProfile, Session, Clue, SubmissionData, Participant, ChatEntry, MissionPhaseInfo } from './types';
+import { GamePhase, UserRole, UserProfile, Session, Clue, SubmissionData, Participant, ChatEntry, MissionPhaseInfo, PersonalNote } from './types';
 import { CLUES } from './constants';
 import { sessionsRef, getSessionRef, onValue, set, remove, update, database, ref, authReady } from './firebase';
 
@@ -27,36 +27,36 @@ const distributeClues = (totalClues: Clue[], teamCount: number, myTeamNumber: nu
   return [];
 };
 
-// === 미션 페이즈 계산 ===
-const computeMissionPhase = (session: Session, elapsedSeconds: number): MissionPhaseInfo => {
-  const totalCommPhases = (session.teamInternalRounds || 3) + (session.teamCrossRounds || 3);
-  const roundSec = (session.roundDuration || 5) * 60;
-  const currentIndex = Math.floor(elapsedSeconds / roundSec);
+// === 미션 페이즈 계산 (강사 제어 방식) ===
+const computeMissionPhase = (session: Session, phaseElapsedSeconds: number): MissionPhaseInfo | null => {
+  const phaseIndex = session.currentPhaseIndex ?? -1;
+  if (phaseIndex < 0) return null;
 
-  if (currentIndex >= totalCommPhases) {
-    const submitStart = totalCommPhases * roundSec;
+  const totalCommPhases = (session.teamInternalRounds || 3) + (session.teamCrossRounds || 3);
+  const totalPhases = totalCommPhases + 1;
+
+  if (phaseIndex >= totalCommPhases) {
     const submitSec = (session.submitDuration || 10) * 60;
-    const submitElapsed = elapsedSeconds - submitStart;
     return {
       type: 'SUBMIT',
-      index: totalCommPhases,
+      index: phaseIndex,
       roundNumber: 1,
-      totalPhases: totalCommPhases + 1,
-      phaseRemaining: Math.max(0, submitSec - submitElapsed),
-      phaseProgress: submitSec > 0 ? Math.min(1, submitElapsed / submitSec) : 1
+      totalPhases,
+      phaseRemaining: Math.max(0, submitSec - phaseElapsedSeconds),
+      phaseProgress: submitSec > 0 ? Math.min(1, phaseElapsedSeconds / submitSec) : 1
     };
   }
 
-  const isInternal = currentIndex % 2 === 0;
-  const phaseElapsed = elapsedSeconds - (currentIndex * roundSec);
+  const isInternal = phaseIndex % 2 === 0;
+  const roundSec = (session.roundDuration || 5) * 60;
 
   return {
     type: isInternal ? 'TEAM_INTERNAL' : 'TEAM_CROSS',
-    index: currentIndex,
-    roundNumber: Math.floor(currentIndex / 2) + 1,
-    totalPhases: totalCommPhases + 1,
-    phaseRemaining: Math.max(0, roundSec - phaseElapsed),
-    phaseProgress: roundSec > 0 ? Math.min(1, phaseElapsed / roundSec) : 1
+    index: phaseIndex,
+    roundNumber: Math.floor(phaseIndex / 2) + 1,
+    totalPhases,
+    phaseRemaining: Math.max(0, roundSec - phaseElapsedSeconds),
+    phaseProgress: roundSec > 0 ? Math.min(1, phaseElapsedSeconds / roundSec) : 1
   };
 };
 
@@ -141,6 +141,15 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [missionElapsed, setMissionElapsed] = useState(0);
+  const [phaseElapsed, setPhaseElapsed] = useState(0);
+
+  // 개인 메모
+  const [personalNote, setPersonalNote] = useState('');
+  const [personalNotes, setPersonalNotes] = useState<Record<string, PersonalNote>>({});
+  const personalNoteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 정보카드 팝업 스와이프 인덱스
+  const [cluePopupIndex, setCluePopupIndex] = useState(0);
 
   // 관리자 대시보드 상태
   const [adminView, setAdminView] = useState<'hub' | 'dashboard'>('hub');
@@ -207,6 +216,11 @@ export default function App() {
           isPaused: data[key].isPaused || false,
           pausedAt: data[key].pausedAt || 0,
           pausedElapsed: data[key].pausedElapsed || 0,
+          currentPhaseIndex: data[key].currentPhaseIndex ?? -1,
+          phaseStartedAt: data[key].phaseStartedAt || 0,
+          isPhasePaused: data[key].isPhasePaused || false,
+          phasePausedElapsed: data[key].phasePausedElapsed || 0,
+          isSubmitEnabled: data[key].isSubmitEnabled || false,
           teamInternalRounds: data[key].teamInternalRounds || 3,
           teamCrossRounds: data[key].teamCrossRounds || 3,
           roundDuration: data[key].roundDuration || 5,
@@ -214,7 +228,8 @@ export default function App() {
           isAnswerRevealed: data[key].isAnswerRevealed || false,
           isSuccessRevealed: data[key].isSuccessRevealed || false,
           isResultReleased: data[key].isResultReleased || false,
-          liveChat: data[key].liveChat || {}
+          liveChat: data[key].liveChat || {},
+          personalNotes: data[key].personalNotes || {}
         }));
         setSessions(arr);
       } else {
@@ -229,6 +244,7 @@ export default function App() {
   // === 미션 타이머 ===
   const activeSession = sessions.find(s => s.id === (role === 'ADMIN' ? activeSessionId : userProfile.sessionId));
 
+  // 전체 미션 경과 시간 (레거시 호환)
   useEffect(() => {
     if (!activeSession?.isMissionStarted || !activeSession?.missionStartedAt) {
       setMissionElapsed(0);
@@ -249,10 +265,31 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeSession?.isMissionStarted, activeSession?.missionStartedAt, activeSession?.isPaused, activeSession?.pausedElapsed]);
 
+  // === 페이즈 타이머 (강사 제어) ===
+  useEffect(() => {
+    if (!activeSession?.isMissionStarted || (activeSession.currentPhaseIndex ?? -1) < 0 || !activeSession.phaseStartedAt) {
+      setPhaseElapsed(0);
+      return;
+    }
+    if (activeSession.isPhasePaused) {
+      setPhaseElapsed(activeSession.phasePausedElapsed || 0);
+      return;
+    }
+    const tick = () => {
+      setPhaseElapsed(Math.floor((Date.now() - activeSession.phaseStartedAt) / 1000));
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [activeSession?.isMissionStarted, activeSession?.currentPhaseIndex, activeSession?.phaseStartedAt, activeSession?.isPhasePaused, activeSession?.phasePausedElapsed]);
+
   // 페이즈 전환 감지 (학습자)
   useEffect(() => {
     if (role !== 'STUDENT' || !activeSession?.isMissionStarted) return;
-    const mp = computeMissionPhase(activeSession, missionElapsed);
+    const currentIdx = activeSession.currentPhaseIndex ?? -1;
+    if (currentIdx < 0) return;
+    const mp = computeMissionPhase(activeSession, phaseElapsed);
+    if (!mp) return;
     if (mp.index !== prevPhaseIdx.current && prevPhaseIdx.current !== -1) {
       const label = mp.type === 'TEAM_INTERNAL' ? `팀 내 소통 ${mp.roundNumber}라운드` :
                     mp.type === 'TEAM_CROSS' ? `팀 간 소통 ${mp.roundNumber}라운드` :
@@ -261,14 +298,16 @@ export default function App() {
       setTimeout(() => setPhaseNotice(null), 3000);
     }
     prevPhaseIdx.current = mp.index;
-  }, [missionElapsed, activeSession, role]);
+  }, [activeSession?.currentPhaseIndex, phaseElapsed, activeSession, role]);
 
-  // === 부저/알람: 전체 시간 종료 시 ===
+  // === 페이즈 종료 시 부저/알람 ===
+  const phaseBuzzerPlayedRef = useRef<number>(-1);
   useEffect(() => {
-    if (!activeSession?.isMissionStarted || !activeSession?.missionDuration) return;
-    const totalSec = activeSession.missionDuration * 60;
-    if (missionElapsed >= totalSec && !buzzerPlayedRef.current) {
-      buzzerPlayedRef.current = true;
+    if (!activeSession?.isMissionStarted || (activeSession.currentPhaseIndex ?? -1) < 0) return;
+    const mp = computeMissionPhase(activeSession, phaseElapsed);
+    if (!mp) return;
+    if (mp.phaseRemaining <= 0 && phaseBuzzerPlayedRef.current !== mp.index) {
+      phaseBuzzerPlayedRef.current = mp.index;
       try {
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
         const playTone = (freq: number, start: number, dur: number) => {
@@ -288,31 +327,7 @@ export default function App() {
         playTone(1100, 0.8, 0.6);
       } catch (e) { console.log('Audio not supported'); }
     }
-    if (missionElapsed < totalSec) {
-      buzzerPlayedRef.current = false;
-    }
-  }, [missionElapsed, activeSession]);
-
-  // === 각 페이즈 종료 시 알림음 ===
-  useEffect(() => {
-    if (!activeSession?.isMissionStarted) return;
-    const mp = computeMissionPhase(activeSession, missionElapsed);
-    if (mp.phaseRemaining <= 0 && mp.phaseRemaining > -2) {
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = 'sine';
-        osc.frequency.value = 660;
-        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.4);
-      } catch (e) {}
-    }
-  }, [missionElapsed, activeSession]);
+  }, [phaseElapsed, activeSession]);
 
   // === 학습자: 결과 발표 감시 ===
   useEffect(() => {
@@ -347,6 +362,14 @@ export default function App() {
     if (!userProfile.sessionId || !isAuthReady) { setLiveChatEntries({}); return; }
     const chatRef = ref(database, `sessions/${userProfile.sessionId}/liveChat`);
     const unsubscribe = onValue(chatRef, (snapshot) => { setLiveChatEntries(snapshot.val() || {}); });
+    return () => unsubscribe();
+  }, [userProfile.sessionId, isAuthReady]);
+
+  // === 개인 메모 동기화 ===
+  useEffect(() => {
+    if (!userProfile.sessionId || !isAuthReady) { setPersonalNotes({}); return; }
+    const notesRef = ref(database, `sessions/${userProfile.sessionId}/personalNotes`);
+    const unsubscribe = onValue(notesRef, (snapshot) => { setPersonalNotes(snapshot.val() || {}); });
     return () => unsubscribe();
   }, [userProfile.sessionId, isAuthReady]);
 
@@ -396,6 +419,21 @@ export default function App() {
     }, 300);
   };
 
+  // === 개인 메모 핸들러 ===
+  const handlePersonalNoteChange = (text: string) => {
+    setPersonalNote(text);
+    if (personalNoteTimeoutRef.current) clearTimeout(personalNoteTimeoutRef.current);
+    personalNoteTimeoutRef.current = setTimeout(async () => {
+      if (userProfile.sessionId && participantId) {
+        try {
+          await update(getSessionRef(userProfile.sessionId), {
+            [`personalNotes/${participantId}`]: { name: userProfile.name, teamNumber: userProfile.teamNumber, text }
+          });
+        } catch (err) { console.error('개인 메모 저장 실패:', err); }
+      }
+    }, 300);
+  };
+
   const myClues = useMemo(() => {
     if (!activeSession) return [];
     if (isViewAllMode) return CLUES;
@@ -416,6 +454,11 @@ export default function App() {
         isPaused: false,
         pausedAt: 0,
         pausedElapsed: 0,
+        currentPhaseIndex: -1,
+        phaseStartedAt: 0,
+        isPhasePaused: false,
+        phasePausedElapsed: 0,
+        isSubmitEnabled: false,
         teamInternalRounds: 3,
         teamCrossRounds: 3,
         roundDuration: 5,
@@ -426,6 +469,7 @@ export default function App() {
         submissions: {},
         participants: {},
         liveChat: {},
+        personalNotes: {},
         createdAt: Date.now()
       });
       setActiveSessionId(sessionId);
@@ -499,12 +543,56 @@ export default function App() {
         teamInternalRounds: cfgInternalRounds,
         teamCrossRounds: cfgCrossRounds,
         roundDuration: cfgRoundDuration,
-        submitDuration: cfgSubmitDuration
+        submitDuration: cfgSubmitDuration,
+        currentPhaseIndex: -1,
+        phaseStartedAt: 0,
+        isPhasePaused: false,
+        phasePausedElapsed: 0,
+        isSubmitEnabled: false
       });
     } catch (err) {
       console.error('미션 시작 실패:', err);
       alert('미션 시작에 실패했습니다.');
     }
+  };
+
+  // === 강사 페이즈 제어 ===
+  const startPhase = async (id: string, phaseIndex: number) => {
+    try {
+      await update(getSessionRef(id), {
+        currentPhaseIndex: phaseIndex,
+        phaseStartedAt: Date.now(),
+        isPhasePaused: false,
+        phasePausedElapsed: 0
+      });
+    } catch (err) { console.error('페이즈 시작 실패:', err); }
+  };
+
+  const pausePhase = async (id: string) => {
+    try {
+      await update(getSessionRef(id), {
+        isPhasePaused: true,
+        phasePausedElapsed: phaseElapsed
+      });
+    } catch (err) { console.error('페이즈 일시정지 실패:', err); }
+  };
+
+  const resumePhase = async (id: string) => {
+    if (!activeSession) return;
+    try {
+      const newStartedAt = Date.now() - ((activeSession.phasePausedElapsed || 0) * 1000);
+      await update(getSessionRef(id), {
+        isPhasePaused: false,
+        phaseStartedAt: newStartedAt
+      });
+    } catch (err) { console.error('페이즈 재개 실패:', err); }
+  };
+
+  const toggleSubmitEnabled = async (id: string) => {
+    if (!activeSession) return;
+    try {
+      await update(getSessionRef(id), { isSubmitEnabled: !activeSession.isSubmitEnabled });
+    } catch (err) { console.error('제출 허용 변경 실패:', err); }
   };
 
   const pauseMission = async (id: string) => {
@@ -549,8 +637,10 @@ export default function App() {
       await update(getSessionRef(id), {
         isMissionStarted: false, missionStartedAt: 0, missionDuration: 60,
         isPaused: false, pausedAt: 0, pausedElapsed: 0,
+        currentPhaseIndex: -1, phaseStartedAt: 0, isPhasePaused: false, phasePausedElapsed: 0,
+        isSubmitEnabled: false,
         isAnswerRevealed: false, isSuccessRevealed: false, isResultReleased: false,
-        submissions: {}, participants: {}, liveChat: {}
+        submissions: {}, participants: {}, liveChat: {}, personalNotes: {}
       });
     } catch (err) { console.error('세션 초기화 실패:', err); }
   };
@@ -575,17 +665,16 @@ export default function App() {
     return isTeamCorrect(mySub);
   }, [activeSession, userProfile.teamNumber]);
 
-  // === 프로세스 스텝 컴포넌트 (가로 꽉찬 사각형 디자인) ===
-  const ProcessSteps = ({ session, elapsed }: { session: Session; elapsed: number }) => {
+  // === 프로세스 스텝 컴포넌트 (강사 제어 기반) ===
+  const ProcessSteps = ({ session, currentPhaseElapsed }: { session: Session; currentPhaseElapsed: number }) => {
     const totalComm = (session.teamInternalRounds || 3) + (session.teamCrossRounds || 3);
     const roundSec = (session.roundDuration || 5) * 60;
-    const currentIdx = Math.min(Math.floor(elapsed / roundSec), totalComm);
+    const currentIdx = session.currentPhaseIndex ?? -1;
 
     const steps: { label: string; shortLabel: string; type: string; active: boolean; done: boolean; progress: number }[] = [];
     for (let i = 0; i < totalComm; i++) {
       const isInternal = i % 2 === 0;
-      const stepStart = i * roundSec;
-      const stepProgress = i < currentIdx ? 1 : i === currentIdx ? Math.min(1, (elapsed - stepStart) / roundSec) : 0;
+      const stepProgress = i < currentIdx ? 1 : i === currentIdx ? Math.min(1, currentPhaseElapsed / roundSec) : 0;
       steps.push({
         label: isInternal ? `팀 내 소통 ${Math.floor(i / 2) + 1}` : `팀 간 소통 ${Math.floor(i / 2) + 1}`,
         shortLabel: isInternal ? `팀내${Math.floor(i / 2) + 1}` : `팀간${Math.floor(i / 2) + 1}`,
@@ -595,9 +684,8 @@ export default function App() {
         progress: stepProgress
       });
     }
-    const submitStart = totalComm * roundSec;
     const submitSec = (session.submitDuration || 10) * 60;
-    const submitProgress = currentIdx >= totalComm ? Math.min(1, (elapsed - submitStart) / submitSec) : 0;
+    const submitProgress = currentIdx >= totalComm ? Math.min(1, currentPhaseElapsed / submitSec) : 0;
     steps.push({
       label: '정답 제출',
       shortLabel: '정답제출',
@@ -624,13 +712,20 @@ export default function App() {
 
   // === 진도율 바 ===
   const ProgressBar = ({ session }: { session: Session }) => {
+    const totalCommPhases = (session.teamInternalRounds || 3) + (session.teamCrossRounds || 3);
+    const totalPhases = totalCommPhases + 1;
+    const currentIdx = session.currentPhaseIndex ?? -1;
+    const completedPhases = Math.max(0, currentIdx);
+    const mp = currentIdx >= 0 ? computeMissionPhase(session, phaseElapsed) : null;
+    const currentProgress = mp ? mp.phaseProgress : 0;
+    const progress = totalPhases > 0 ? Math.min(1, (completedPhases + currentProgress) / totalPhases) : 0;
     const totalSeconds = session.missionDuration * 60;
-    const remaining = Math.max(0, totalSeconds - missionElapsed);
-    const progress = totalSeconds > 0 ? Math.min(1, missionElapsed / totalSeconds) : 0;
+    const estimatedElapsed = progress * totalSeconds;
+    const remaining = Math.max(0, totalSeconds - estimatedElapsed);
     const minutes = Math.floor(remaining / 60);
-    const seconds = remaining % 60;
+    const seconds = Math.floor(remaining % 60);
     const isUrgent = remaining < totalSeconds * 0.2;
-    const isExpired = remaining <= 0;
+    const isExpired = currentIdx >= totalCommPhases && mp && mp.phaseRemaining <= 0;
 
     return (
       <div className="space-y-2">
@@ -697,10 +792,20 @@ export default function App() {
 
       const submittedCount = Object.keys(s.submissions).length;
       const totalParticipants = s.participants.length;
-      const mp = s.isMissionStarted ? computeMissionPhase(s, missionElapsed) : null;
+      const mp = s.isMissionStarted && (s.currentPhaseIndex ?? -1) >= 0 ? computeMissionPhase(s, phaseElapsed) : null;
+      const totalCommPhases = (s.teamInternalRounds || 3) + (s.teamCrossRounds || 3);
+      const allPhaseLabels: { label: string; type: string }[] = [];
+      for (let pi = 0; pi < totalCommPhases; pi++) {
+        const isInt = pi % 2 === 0;
+        allPhaseLabels.push({
+          label: isInt ? `팀 내 소통 ${Math.floor(pi / 2) + 1}` : `팀 간 소통 ${Math.floor(pi / 2) + 1}`,
+          type: isInt ? 'internal' : 'cross'
+        });
+      }
+      allPhaseLabels.push({ label: '정답 제출', type: 'submit' });
 
       // 순위 계산
-      const correctTeams = Object.entries(s.submissions)
+      const correctTeams = (Object.entries(s.submissions) as [string, SubmissionData][])
         .filter(([, sub]) => isTeamCorrect(sub))
         .sort(([, a], [, b]) => (a.submittedAt || 0) - (b.submittedAt || 0));
 
@@ -784,25 +889,95 @@ export default function App() {
                 ) : (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className={`w-3 h-3 ${s.isPaused ? 'bg-yellow-500' : 'bg-purple-500 animate-pulse'} border-2`} style={{ borderColor: 'var(--border-primary)' }}></span>
+                      <span className={`w-3 h-3 ${s.isPhasePaused ? 'bg-yellow-500' : 'bg-purple-500 animate-pulse'} border-2`} style={{ borderColor: 'var(--border-primary)' }}></span>
                       <h3 className="font-poster text-xl" style={{ color: 'var(--text-primary)' }}>미션 진행 현황</h3>
-                      {s.isPaused && <span className="font-mono text-xs font-bold px-2 py-0.5 bg-yellow-600 text-yellow-100 border-2 border-yellow-400">일시정지</span>}
-                      <div className="ml-auto flex items-center gap-2">
-                        <button
-                          onClick={() => s.isPaused ? resumeMission(s.id) : pauseMission(s.id)}
-                          className={`px-4 py-2 font-poster text-sm border-3 transition-all ${s.isPaused ? 'bg-emerald-600 border-emerald-400 text-white hover:bg-emerald-500' : 'bg-yellow-600 border-yellow-400 text-white hover:bg-yellow-500'}`}
-                          style={{ boxShadow: '3px 3px 0px var(--shadow-color)' }}
-                        >
-                          {s.isPaused ? '▶ 재개' : '⏸ 일시정지'}
-                        </button>
-                        {mp && (
-                          <span className={`px-3 py-1 font-mono text-xs font-bold border-2 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-900 border-purple-500 text-purple-300' : mp.type === 'TEAM_CROSS' ? 'bg-blue-900 border-blue-500 text-blue-300' : 'bg-red-900 border-red-500 text-red-300'}`}>
-                            {mp.type === 'TEAM_INTERNAL' ? `팀 내 소통 ${mp.roundNumber}` : mp.type === 'TEAM_CROSS' ? `팀 간 소통 ${mp.roundNumber}` : '정답 제출'} | {formatTimer(Math.floor(mp.phaseRemaining))}
-                          </span>
-                        )}
-                      </div>
+                      {s.isPhasePaused && <span className="font-mono text-xs font-bold px-2 py-0.5 bg-yellow-600 text-yellow-100 border-2 border-yellow-400">일시정지</span>}
+                      {mp && (
+                        <span className={`px-3 py-1 font-mono text-xs font-bold border-2 ml-2 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-900 border-purple-500 text-purple-300' : mp.type === 'TEAM_CROSS' ? 'bg-blue-900 border-blue-500 text-blue-300' : 'bg-red-900 border-red-500 text-red-300'}`}>
+                          {mp.type === 'TEAM_INTERNAL' ? `팀 내 소통 ${mp.roundNumber}` : mp.type === 'TEAM_CROSS' ? `팀 간 소통 ${mp.roundNumber}` : '정답 제출'} | {formatTimer(Math.floor(mp.phaseRemaining))}
+                        </span>
+                      )}
                     </div>
-                    <ProcessSteps session={s} elapsed={missionElapsed} />
+
+                    {/* 페이즈별 제어 버튼 */}
+                    <div className="space-y-2">
+                      {allPhaseLabels.map((phase, idx) => {
+                        const currentIdx = s.currentPhaseIndex ?? -1;
+                        const isDone = idx < currentIdx;
+                        const isActive = idx === currentIdx;
+                        const isPending = idx > currentIdx;
+                        const isNext = idx === currentIdx + 1;
+                        const phaseColor = phase.type === 'internal' ? 'purple' : phase.type === 'cross' ? 'blue' : 'red';
+                        const phaseTimeExpired = isActive && mp && mp.phaseRemaining <= 0;
+
+                        return (
+                          <div key={idx} className={`flex items-center gap-3 px-4 py-3 border-2 transition-all ${isDone ? 'opacity-60' : ''} ${isActive ? `border-${phaseColor}-500` : ''}`} style={{ borderColor: isActive ? undefined : 'var(--border-secondary)', background: isActive ? (phase.type === 'internal' ? 'rgba(124,58,237,0.15)' : phase.type === 'cross' ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)') : 'var(--bg-secondary)' }}>
+                            <span className={`w-8 h-8 flex items-center justify-center font-poster text-sm border-2 ${isDone ? 'bg-emerald-600 border-emerald-400 text-white' : isActive ? `bg-${phaseColor}-600 border-${phaseColor}-400 text-white` : ''}`} style={!isDone && !isActive ? { background: 'var(--bg-card)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' } : {}}>
+                              {isDone ? '✓' : idx + 1}
+                            </span>
+                            <span className={`font-poster text-base flex-1 ${isActive ? 'text-white' : ''}`} style={!isActive ? { color: 'var(--text-primary)' } : {}}>
+                              {phase.label}
+                            </span>
+                            <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
+                              {phase.type === 'submit' ? `${s.submitDuration || 10}분` : `${s.roundDuration || 5}분`}
+                            </span>
+                            {/* 현재 활성 페이즈 타이머 */}
+                            {isActive && mp && (
+                              <span className={`font-mono text-lg font-bold ${phaseTimeExpired ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+                                {phaseTimeExpired ? '시간 종료!' : formatTimer(Math.floor(mp.phaseRemaining))}
+                              </span>
+                            )}
+                            {/* 제어 버튼 */}
+                            <div className="flex items-center gap-1">
+                              {isActive && !phaseTimeExpired && (
+                                <button
+                                  onClick={() => s.isPhasePaused ? resumePhase(s.id) : pausePhase(s.id)}
+                                  className={`px-3 py-1.5 font-poster text-sm border-2 transition-all ${s.isPhasePaused ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-yellow-600 border-yellow-400 text-white'}`}
+                                >
+                                  {s.isPhasePaused ? '▶' : '⏸'}
+                                </button>
+                              )}
+                              {(isNext || (isPending && idx === 0 && currentIdx === -1)) && (
+                                <button
+                                  onClick={() => startPhase(s.id, idx)}
+                                  className={`px-4 py-1.5 font-poster text-sm border-2 bg-${phaseColor}-600 border-${phaseColor}-400 text-white hover:opacity-80 transition-all animate-pulse`}
+                                >
+                                  ▶ 시작
+                                </button>
+                              )}
+                              {isActive && phaseTimeExpired && idx < allPhaseLabels.length - 1 && (
+                                <button
+                                  onClick={() => startPhase(s.id, idx + 1)}
+                                  className="px-4 py-1.5 font-poster text-sm border-2 bg-emerald-600 border-emerald-400 text-white hover:opacity-80 transition-all animate-pulse"
+                                >
+                                  다음 ▶
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* 제출 허용 토글 */}
+                    <div className="flex items-center justify-between pt-3 border-t-2" style={{ borderColor: 'var(--border-secondary)' }}>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-3 h-3 ${s.isSubmitEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-red-600'} border-2`} style={{ borderColor: 'var(--border-primary)' }}></span>
+                        <span className="font-poster text-base" style={{ color: 'var(--text-primary)' }}>정답 제출</span>
+                        <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
+                          {s.isSubmitEnabled ? '학습자 제출 가능' : '학습자 제출 불가'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => toggleSubmitEnabled(s.id)}
+                        className={`px-5 py-2 font-poster text-sm border-3 transition-all ${s.isSubmitEnabled ? 'bg-red-600 border-red-400 text-white' : 'bg-emerald-600 border-emerald-400 text-white'}`}
+                        style={{ boxShadow: '3px 3px 0px var(--shadow-color)' }}
+                      >
+                        {s.isSubmitEnabled ? '제출 잠금' : '제출 허용'}
+                      </button>
+                    </div>
+
+                    <ProcessSteps session={s} currentPhaseElapsed={phaseElapsed} />
                     <ProgressBar session={s} />
                   </div>
                 )}
@@ -1018,7 +1193,7 @@ export default function App() {
       <div className="mb-4 herb-glow">
         <HerbIcon size={56} />
       </div>
-      <h1 className="text-3xl font-poster mb-1 tracking-tighter text-center leading-none" style={{ color: 'var(--text-primary)' }}>생사초를<br /><span className="text-purple-500 text-4xl">찾아라</span></h1>
+      <h1 className="text-3xl font-poster mb-1 tracking-tighter text-center leading-none whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>생사초를 <span className="text-purple-500 text-4xl">찾아라</span></h1>
       <p className="text-[9px] font-mono tracking-[0.3em] mb-4 text-center font-bold" style={{ color: 'var(--text-secondary)' }}>소통과 협업 시뮬레이션</p>
 
       <div className="w-full brutal-card p-5 space-y-4" style={{ background: 'var(--bg-card)' }}>
@@ -1092,8 +1267,9 @@ export default function App() {
     const isMissionOn = activeSession?.isMissionStarted || false;
     const allParticipants = activeSession?.participants || [];
     const teamCount = activeSession?.teamCount || 1;
-    const mp = isMissionOn && activeSession ? computeMissionPhase(activeSession, missionElapsed) : null;
+    const mp = isMissionOn && activeSession && (activeSession.currentPhaseIndex ?? -1) >= 0 ? computeMissionPhase(activeSession, phaseElapsed) : null;
     const isSubmitPhase = mp?.type === 'SUBMIT';
+    const isSubmitEnabled = activeSession?.isSubmitEnabled || false;
 
     const scrollToCard = (index: number) => {
       if (carouselRef.current) {
@@ -1109,10 +1285,11 @@ export default function App() {
         setActiveCardIndex(Math.round(scrollLeft / cardWidth));
       }
     };
-    const chatEntries = Object.entries(liveChatEntries).filter(([, e]) => e.message?.trim());
+    const chatEntries = (Object.entries(liveChatEntries) as [string, ChatEntry][]).filter(([, e]) => e.message?.trim());
 
     // === 미션 대기 중 화면 ===
-    if (!isMissionOn) {
+    const isWaiting = !isMissionOn || (activeSession?.currentPhaseIndex ?? -1) < 0;
+    if (isWaiting) {
       return (
         <div className="max-w-md mx-auto px-6 min-h-[calc(100vh-80px)] animate-fade-in flex flex-col items-center justify-center text-center space-y-8">
           <div className="brutal-card p-6 flex items-center justify-between w-full shadow-[8px_8px_0px_#7c3aed]" style={{ borderColor: 'var(--border-primary)', background: 'var(--bg-card)' }}>
@@ -1130,9 +1307,11 @@ export default function App() {
             <div className="herb-glow mx-auto w-fit">
               <HerbIcon size={80} />
             </div>
-            <h2 className="font-poster text-4xl tracking-tighter" style={{ color: 'var(--text-primary)' }}>미션 대기 중</h2>
+            <h2 className="font-poster text-4xl tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+              {isMissionOn ? '다음 단계 대기 중' : '미션 대기 중'}
+            </h2>
             <p className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>
-              강사가 미션을 시작할 때까지<br />기다려 주세요
+              {isMissionOn ? '강사가 다음 단계를 시작할 때까지' : '강사가 미션을 시작할 때까지'}<br />기다려 주세요
             </p>
             <div className="flex justify-center">
               <div className="w-12 h-12 border-t-4 border-r-4 border-purple-500 border-l-4 border-l-transparent border-b-4 border-b-transparent rounded-full animate-spin"></div>
@@ -1157,14 +1336,14 @@ export default function App() {
         )}
 
         {/* 일시정지 배너 */}
-        {activeSession?.isPaused && (
+        {activeSession?.isPhasePaused && (
           <div className="sticky top-20 z-[95] -mx-5 px-5 py-3 bg-yellow-600 border-b-4 border-yellow-400 text-center">
             <span className="font-poster text-lg text-white">⏸ 타이머 일시정지 중</span>
           </div>
         )}
 
         {/* 페이즈 바 (상단 고정) */}
-        {mp && !activeSession?.isPaused && (
+        {mp && !activeSession?.isPhasePaused && (
           <div className={`sticky top-20 z-[90] -mx-5 px-5 py-3 border-b-4 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-950/95 border-purple-500' : mp.type === 'TEAM_CROSS' ? 'bg-blue-950/95 border-blue-500' : 'bg-red-950/95 border-red-500'}`} style={{ backdropFilter: 'blur(10px)' }}>
             <div className="flex justify-between items-center">
               <div>
@@ -1183,7 +1362,7 @@ export default function App() {
         {/* 프로세스 스텝 */}
         {activeSession && (
           <div className="pt-2">
-            <ProcessSteps session={activeSession} elapsed={missionElapsed} />
+            <ProcessSteps session={activeSession} currentPhaseElapsed={phaseElapsed} />
           </div>
         )}
 
@@ -1206,16 +1385,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* 정답 제출 섹션 (제출 페이즈일 때) */}
-        {isSubmitPhase && !activeSession?.submissions[userProfile.teamNumber] && (
+        {/* 정답 제출 섹션 (강사가 허용했을 때) */}
+        {isSubmitEnabled && !activeSession?.submissions[userProfile.teamNumber] && (
           <div className="border-4 border-red-500 bg-red-950/30 p-4 space-y-3 animate-fade-in">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 bg-red-500 animate-pulse border-2 border-white"></span>
-              <span className="font-poster text-lg text-red-300">정답 제출 시간입니다!</span>
+              <span className="font-poster text-lg text-red-300">정답 제출이 허용되었습니다!</span>
             </div>
             <button onClick={() => setPhase(GamePhase.SUBMIT)} className="brutal-btn-red w-full py-4 text-xl">
               답안 제출하기
             </button>
+          </div>
+        )}
+        {!isSubmitEnabled && isSubmitPhase && !activeSession?.submissions[userProfile.teamNumber] && (
+          <div className="border-4 border-zinc-600 bg-zinc-900/30 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-zinc-500 border-2 border-zinc-400"></span>
+              <span className="font-poster text-lg text-zinc-400">정답 제출 대기 중</span>
+            </div>
+            <p className="font-mono text-xs text-zinc-500">강사가 제출을 허용하면 활성화됩니다.</p>
           </div>
         )}
 
@@ -1279,8 +1467,8 @@ export default function App() {
             </button>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {myClues.map(clue => (
-              <div key={clue.id} onClick={() => setSelectedClue(clue)} className="relative aspect-square border-4 cursor-pointer hover:border-purple-500 transition-all overflow-hidden group active:scale-95 shadow-[4px_4px_0px_rgba(0,0,0,0.5)]" style={{ background: 'var(--bg-input)', borderColor: 'var(--border-secondary)' }}>
+            {myClues.map((clue, idx) => (
+              <div key={clue.id} onClick={() => { setSelectedClue(clue); setCluePopupIndex(idx); }} className="relative aspect-square border-4 cursor-pointer hover:border-purple-500 transition-all overflow-hidden group active:scale-95 shadow-[4px_4px_0px_rgba(0,0,0,0.5)]" style={{ background: 'var(--bg-input)', borderColor: 'var(--border-secondary)' }}>
                 <img src={clue.imageUrl} alt={clue.label} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all duration-300" />
                 <div className="absolute bottom-1 left-1 bg-black/90 px-1 font-mono text-[10px] text-white border-2 border-white/50 font-bold">{clue.label}</div>
               </div>
@@ -1288,14 +1476,50 @@ export default function App() {
           </div>
         </div>
 
-        {/* 팀 메모 */}
+        {/* 실시간 소통 - 개인 작성칸 (위쪽) */}
         <div className="space-y-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-poster tracking-[0.2em]" style={{ color: 'var(--text-primary)' }}>팀 공유 메모</h3>
+            <h3 className="text-sm font-poster tracking-[0.2em] flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <span className="w-3 h-3 bg-green-500 animate-pulse border-2" style={{ borderColor: 'var(--border-primary)' }}></span>
+              내 메모 작성
+            </h3>
+            <span className="text-[10px] font-mono text-green-500 animate-pulse font-bold">● 팀 메모에 자동 동기화</span>
+          </div>
+          <div className="border-4 border-green-600 bg-green-950/20 p-3 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-mono font-bold bg-green-600 text-white px-2 py-0.5 border-2 border-white">{userProfile.name}</span>
+              <span className="text-[10px] font-mono text-green-400 font-bold">{userProfile.teamNumber}팀</span>
+            </div>
+            <textarea value={personalNote} onChange={(e) => handlePersonalNoteChange(e.target.value)} placeholder="여기에 메모를 작성하면 팀 메모판에 자동으로 공유됩니다..." className="w-full h-28 bg-black/60 p-3 text-sm text-green-400 font-mono outline-none resize-none placeholder:text-zinc-700 border-2 border-green-800 focus:border-green-400 transition-colors font-bold" />
+          </div>
+        </div>
+
+        {/* 팀 메모판 (자동 동기화) */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-poster tracking-[0.2em]" style={{ color: 'var(--text-primary)' }}>팀 메모판</h3>
             <span className="text-[10px] font-mono text-green-500 animate-pulse">● 실시간 동기화</span>
           </div>
-          <div className="brutal-card p-1 shadow-none" style={{ borderColor: 'var(--border-primary)' }}>
-            <textarea value={memo} onChange={(e) => handleMemoChange(e.target.value)} placeholder="팀원들과 실시간 공유됩니다. 다른 팀에서 받은 정보를 기록하세요..." className="w-full h-64 p-5 text-base text-green-500 font-mono outline-none resize-none border-none font-bold" style={{ background: 'var(--bg-input)' }} />
+          <div className="brutal-card p-3 shadow-none space-y-2" style={{ borderColor: 'var(--border-primary)' }}>
+            {(() => {
+              const teamNotes = (Object.entries(personalNotes) as [string, PersonalNote][]).filter(([, n]) => n.teamNumber === userProfile.teamNumber && n.text?.trim());
+              return teamNotes.length > 0 ? (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {teamNotes.map(([id, note]) => (
+                    <div key={id} className={`border-2 p-3 ${id === participantId ? 'border-green-700 bg-green-950/20' : ''}`} style={id !== participantId ? { borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' } : {}}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 border ${id === participantId ? 'bg-green-900/50 text-green-300 border-green-700' : ''}`} style={id !== participantId ? { background: 'var(--bg-secondary)', color: 'var(--text-primary)', borderColor: 'var(--border-secondary)' } : {}}>
+                          {note.name} {id === participantId ? '(나)' : ''}
+                        </span>
+                      </div>
+                      <p className="text-sm font-mono text-green-500 whitespace-pre-wrap break-words leading-relaxed font-bold">{note.text}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs font-mono text-center py-8 font-bold" style={{ color: 'var(--text-secondary)' }}>아직 작성된 메모가 없습니다.</p>
+              );
+            })()}
           </div>
         </div>
 
@@ -1332,8 +1556,8 @@ export default function App() {
           )}
         </div>
 
-        {/* 답안 제출 버튼 (제출 페이즈에서만 표시) */}
-        {isSubmitPhase && !activeSession?.submissions[userProfile.teamNumber] && (
+        {/* 답안 제출 버튼 (강사가 허용했을 때만) */}
+        {isSubmitEnabled && !activeSession?.submissions[userProfile.teamNumber] && (
           <div className="fixed bottom-10 left-0 right-0 px-6 max-w-md mx-auto z-[80]">
             <button onClick={() => setPhase(GamePhase.SUBMIT)} className="brutal-btn w-full py-6 text-3xl shadow-[8px_8px_0px_var(--shadow-color)]">
               답안 제출하기
@@ -1341,15 +1565,41 @@ export default function App() {
           </div>
         )}
 
-        {/* 클루 모달 */}
+        {/* 클루 모달 (스와이프 가능) */}
         {selectedClue && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/98 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/98 backdrop-blur-xl"
+            onTouchStart={(e) => { (e.currentTarget as any)._touchStartX = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              const startX = (e.currentTarget as any)._touchStartX;
+              if (startX === undefined) return;
+              const diff = e.changedTouches[0].clientX - startX;
+              if (Math.abs(diff) > 50) {
+                const newIdx = diff > 0 ? Math.max(0, cluePopupIndex - 1) : Math.min(myClues.length - 1, cluePopupIndex + 1);
+                setCluePopupIndex(newIdx);
+                setSelectedClue(myClues[newIdx]);
+              }
+            }}
+          >
             <div className="brutal-card p-2 w-full max-w-sm animate-scale-in relative" style={{ borderColor: 'var(--border-primary)' }}>
               <button onClick={() => setSelectedClue(null)} className="absolute -top-4 -right-4 w-12 h-12 brutal-btn-red flex items-center justify-center text-3xl font-poster z-50">X</button>
+              {/* 이전 버튼 */}
+              {cluePopupIndex > 0 && (
+                <button onClick={() => { const ni = cluePopupIndex - 1; setCluePopupIndex(ni); setSelectedClue(myClues[ni]); }} className="absolute left-1 top-1/2 -translate-y-1/2 z-50 w-10 h-10 bg-black/80 border-2 border-white text-white font-poster text-xl flex items-center justify-center">&lt;</button>
+              )}
+              {/* 다음 버튼 */}
+              {cluePopupIndex < myClues.length - 1 && (
+                <button onClick={() => { const ni = cluePopupIndex + 1; setCluePopupIndex(ni); setSelectedClue(myClues[ni]); }} className="absolute right-1 top-1/2 -translate-y-1/2 z-50 w-10 h-10 bg-black/80 border-2 border-white text-white font-poster text-xl flex items-center justify-center">&gt;</button>
+              )}
               <img src={selectedClue.imageUrl} alt={selectedClue.label} className="w-full h-auto border-4 border-black" />
               <div className="p-4 mt-2 font-poster flex justify-between items-center border-t-4" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', borderColor: 'var(--border-primary)' }}>
                 <span className="text-3xl uppercase tracking-tighter">{selectedClue.label}</span>
-                <span className="font-mono text-[10px] text-purple-500 font-bold">정보 카드</span>
+                <span className="font-mono text-[10px] text-purple-500 font-bold">{cluePopupIndex + 1} / {myClues.length}</span>
+              </div>
+              {/* 도트 인디케이터 */}
+              <div className="flex justify-center gap-1.5 py-2">
+                {myClues.map((_, i) => (
+                  <button key={i} onClick={() => { setCluePopupIndex(i); setSelectedClue(myClues[i]); }} className={`transition-all ${cluePopupIndex === i ? 'w-6 h-1.5 bg-purple-500' : 'w-1.5 h-1.5'}`} style={cluePopupIndex !== i ? { background: 'var(--border-secondary)' } : {}} />
+                ))}
               </div>
             </div>
             <div className="absolute inset-0 z-[-1]" onClick={() => setSelectedClue(null)}></div>
@@ -1439,7 +1689,7 @@ export default function App() {
           <div className="herb-glow">
             <HerbIcon size={32} />
           </div>
-          <span className="text-xl font-poster tracking-tighter" style={{ color: 'var(--text-primary)' }}>생사초를 찾아라</span>
+          <span className="text-xl font-poster tracking-tighter whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>생사초를 찾아라</span>
         </div>
         <div className="flex items-center gap-3">
           <HeaderControls />

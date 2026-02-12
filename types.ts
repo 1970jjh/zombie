@@ -45,6 +45,12 @@ export interface ChatEntry {
   message: string;
 }
 
+export interface PersonalNote {
+  name: string;
+  teamNumber: number;
+  text: string;
+}
+
 export interface Session {
   id: string;
   groupName: string;
@@ -53,10 +59,16 @@ export interface Session {
   isMissionStarted: boolean;
   missionStartedAt: number;
   missionDuration: number;
-  // Timer pause support
+  // Timer pause support (legacy, kept for compatibility)
   isPaused: boolean;
   pausedAt: number;
   pausedElapsed: number;
+  // Instructor-controlled phase system
+  currentPhaseIndex: number;  // -1 = waiting, 0+ = active phase
+  phaseStartedAt: number;
+  isPhasePaused: boolean;
+  phasePausedElapsed: number;
+  isSubmitEnabled: boolean;
   // Communication round settings
   teamInternalRounds: number;
   teamCrossRounds: number;
@@ -69,6 +81,7 @@ export interface Session {
   submissions: { [teamNumber: number]: SubmissionData };
   participants: Participant[];
   liveChat: { [participantId: string]: ChatEntry };
+  personalNotes: { [participantId: string]: PersonalNote };
   createdAt: number;
 }
 
