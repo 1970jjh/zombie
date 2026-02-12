@@ -405,18 +405,16 @@ export default function App() {
     }, 300);
   };
 
-  const handleChatChange = (newMessage: string) => {
-    setChatMessage(newMessage);
-    if (chatTimeoutRef.current) clearTimeout(chatTimeoutRef.current);
-    chatTimeoutRef.current = setTimeout(async () => {
-      if (userProfile.sessionId && participantId) {
-        try {
-          await update(getSessionRef(userProfile.sessionId), {
-            [`liveChat/${participantId}`]: { name: userProfile.name, teamNumber: userProfile.teamNumber, message: newMessage }
-          });
-        } catch (err) { console.error('채팅 저장 실패:', err); }
-      }
-    }, 300);
+  const sendChatMessage = async () => {
+    const msg = chatMessage.trim();
+    if (!msg || !userProfile.sessionId || !participantId) return;
+    const msgId = `${participantId}_${Date.now()}`;
+    try {
+      await update(getSessionRef(userProfile.sessionId), {
+        [`liveChat/${msgId}`]: { name: userProfile.name, teamNumber: userProfile.teamNumber, message: msg, timestamp: Date.now() }
+      });
+      setChatMessage('');
+    } catch (err) { console.error('메시지 전송 실패:', err); }
   };
 
   // === 개인 메모 핸들러 ===
@@ -1285,7 +1283,7 @@ export default function App() {
         setActiveCardIndex(Math.round(scrollLeft / cardWidth));
       }
     };
-    const chatEntries = (Object.entries(liveChatEntries) as [string, ChatEntry][]).filter(([, e]) => e.message?.trim());
+
 
     // === 미션 대기 중 화면 ===
     const isWaiting = !isMissionOn || (activeSession?.currentPhaseIndex ?? -1) < 0;
@@ -1455,105 +1453,107 @@ export default function App() {
           </div>
         </div>
 
-        {/* 정보 카드 */}
+        {/* 정보 카드 - 가로 스와이프 슬라이드 */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
             <h3 className="text-sm font-poster tracking-[0.2em] flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
               <span className="w-3 h-3 bg-purple-600 animate-pulse border-2" style={{ borderColor: 'var(--border-primary)' }}></span>
               정보 카드
+              <span className="font-mono text-[10px] font-bold text-purple-400">{myClues.length}장</span>
             </h3>
             <button onClick={() => setIsViewAllMode(!isViewAllMode)} className={`px-3 py-1 font-mono text-[10px] border-4 transition-all font-bold ${isViewAllMode ? 'shadow-[2px_2px_0px_#7c3aed]' : ''}`} style={isViewAllMode ? { background: 'var(--text-primary)', color: 'var(--bg-primary)', borderColor: 'var(--border-primary)' } : { background: 'var(--bg-input)', color: 'var(--text-secondary)', borderColor: 'var(--border-secondary)' }}>
               {isViewAllMode ? '우리 팀만 보기' : '전체 보기'}
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            {myClues.map((clue, idx) => (
-              <div key={clue.id} onClick={() => { setSelectedClue(clue); setCluePopupIndex(idx); }} className="relative aspect-square border-4 cursor-pointer hover:border-purple-500 transition-all overflow-hidden group active:scale-95 shadow-[4px_4px_0px_rgba(0,0,0,0.5)]" style={{ background: 'var(--bg-input)', borderColor: 'var(--border-secondary)' }}>
-                <img src={clue.imageUrl} alt={clue.label} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all duration-300" />
-                <div className="absolute bottom-1 left-1 bg-black/90 px-1 font-mono text-[10px] text-white border-2 border-white/50 font-bold">{clue.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 실시간 소통 - 개인 작성칸 (위쪽) */}
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-poster tracking-[0.2em] flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-              <span className="w-3 h-3 bg-green-500 animate-pulse border-2" style={{ borderColor: 'var(--border-primary)' }}></span>
-              내 메모 작성
-            </h3>
-            <span className="text-[10px] font-mono text-green-500 animate-pulse font-bold">● 팀 메모에 자동 동기화</span>
-          </div>
-          <div className="border-4 border-green-600 bg-green-950/20 p-3 space-y-2">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-mono font-bold bg-green-600 text-white px-2 py-0.5 border-2 border-white">{userProfile.name}</span>
-              <span className="text-[10px] font-mono text-green-400 font-bold">{userProfile.teamNumber}팀</span>
-            </div>
-            <textarea value={personalNote} onChange={(e) => handlePersonalNoteChange(e.target.value)} placeholder="여기에 메모를 작성하면 팀 메모판에 자동으로 공유됩니다..." className="w-full h-28 bg-black/60 p-3 text-sm text-green-400 font-mono outline-none resize-none placeholder:text-zinc-700 border-2 border-green-800 focus:border-green-400 transition-colors font-bold" />
-          </div>
-        </div>
-
-        {/* 팀 메모판 (자동 동기화) */}
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-poster tracking-[0.2em]" style={{ color: 'var(--text-primary)' }}>팀 메모판</h3>
-            <span className="text-[10px] font-mono text-green-500 animate-pulse">● 실시간 동기화</span>
-          </div>
-          <div className="brutal-card p-3 shadow-none space-y-2" style={{ borderColor: 'var(--border-primary)' }}>
-            {(() => {
-              const teamNotes = (Object.entries(personalNotes) as [string, PersonalNote][]).filter(([, n]) => n.teamNumber === userProfile.teamNumber && n.text?.trim());
-              return teamNotes.length > 0 ? (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {teamNotes.map(([id, note]) => (
-                    <div key={id} className={`border-2 p-3 ${id === participantId ? 'border-green-700 bg-green-950/20' : ''}`} style={id !== participantId ? { borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' } : {}}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 border ${id === participantId ? 'bg-green-900/50 text-green-300 border-green-700' : ''}`} style={id !== participantId ? { background: 'var(--bg-secondary)', color: 'var(--text-primary)', borderColor: 'var(--border-secondary)' } : {}}>
-                          {note.name} {id === participantId ? '(나)' : ''}
-                        </span>
-                      </div>
-                      <p className="text-sm font-mono text-green-500 whitespace-pre-wrap break-words leading-relaxed font-bold">{note.text}</p>
-                    </div>
-                  ))}
+          {/* 가로 스와이프 카루셀 */}
+          <div className="relative">
+            <div
+              className="flex gap-3 overflow-x-auto pb-3 -mx-2 px-2"
+              style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+            >
+              {myClues.map((clue, idx) => (
+                <div key={clue.id} onClick={() => { setSelectedClue(clue); setCluePopupIndex(idx); }}
+                  className="flex-shrink-0 w-[75%] border-4 cursor-pointer hover:border-purple-500 transition-all overflow-hidden group active:scale-[0.98] shadow-[4px_4px_0px_rgba(0,0,0,0.5)]"
+                  style={{ scrollSnapAlign: 'center', background: 'var(--bg-input)', borderColor: 'var(--border-secondary)' }}
+                >
+                  <div className="relative aspect-[4/3]">
+                    <img src={clue.imageUrl} alt={clue.label} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all duration-300" />
+                  </div>
+                  <div className="px-3 py-2 flex justify-between items-center border-t-4" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' }}>
+                    <span className="font-poster text-lg" style={{ color: 'var(--text-primary)' }}>{clue.label}</span>
+                    <span className="font-mono text-[10px] text-purple-500 font-bold">{idx + 1}/{myClues.length}</span>
+                  </div>
                 </div>
-              ) : (
-                <p className="text-xs font-mono text-center py-8 font-bold" style={{ color: 'var(--text-secondary)' }}>아직 작성된 메모가 없습니다.</p>
-              );
-            })()}
+              ))}
+            </div>
+            <p className="text-center font-mono text-[10px] font-bold mt-1" style={{ color: 'var(--text-secondary)' }}>← 좌우로 스와이프하여 카드를 넘기세요 →</p>
           </div>
         </div>
 
-        {/* 실시간 채팅 */}
+        {/* 실시간 소통 - 카카오톡 스타일 채팅 */}
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-poster tracking-[0.2em] flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
               <span className="w-3 h-3 bg-blue-500 animate-pulse border-2" style={{ borderColor: 'var(--border-primary)' }}></span>
               실시간 소통
             </h3>
-            <span className="text-[10px] font-mono text-blue-400 font-bold">{Object.keys(liveChatEntries).length}명 접속</span>
+            <span className="text-[10px] font-mono text-blue-400 font-bold">{new Set((Object.values(liveChatEntries) as ChatEntry[]).map(e => e.name)).size}명 참여</span>
           </div>
-          <div className="border-4 border-blue-500 bg-blue-950/30 p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono font-bold bg-blue-600 text-white px-2 py-0.5 border-2 border-white">{userProfile.name}</span>
-              <span className="text-[10px] font-mono text-blue-400 font-bold">{userProfile.teamNumber}팀</span>
+
+          {/* 메시지 리스트 */}
+          <div className="border-4 border-blue-500 overflow-hidden" style={{ background: 'var(--bg-card)' }}>
+            <div className="max-h-80 overflow-y-auto p-3 space-y-3" style={{ background: isDarkMode ? '#0a0f1a' : '#eef2ff' }}>
+              {(() => {
+                const allMessages = (Object.entries(liveChatEntries) as [string, ChatEntry][])
+                  .filter(([, e]) => e.message?.trim())
+                  .sort(([, a], [, b]) => (a.timestamp || 0) - (b.timestamp || 0));
+                return allMessages.length > 0 ? allMessages.map(([id, entry]) => {
+                  const isMe = entry.name === userProfile.name && entry.teamNumber === userProfile.teamNumber;
+                  const isSameTeam = entry.teamNumber === userProfile.teamNumber;
+                  return (
+                    <div key={id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                      {!isMe && (
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className={`text-[11px] font-mono font-bold px-1.5 py-0.5 border ${isSameTeam ? 'bg-purple-900/50 text-purple-300 border-purple-700' : ''}`} style={!isSameTeam ? { background: 'var(--bg-secondary)', color: 'var(--text-primary)', borderColor: 'var(--border-secondary)' } : {}}>
+                            {entry.name}
+                          </span>
+                          <span className="text-[9px] font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>{entry.teamNumber}팀</span>
+                        </div>
+                      )}
+                      <div className={`max-w-[80%] px-3 py-2 text-sm font-mono break-words whitespace-pre-wrap leading-relaxed ${isMe ? 'bg-purple-600 text-white border-2 border-purple-400 shadow-[2px_2px_0px_rgba(0,0,0,0.3)]' : 'border-2 shadow-[2px_2px_0px_rgba(0,0,0,0.15)]'}`} style={!isMe ? { background: isDarkMode ? '#1e1e2e' : '#fff', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' } : {}}>
+                        {entry.message}
+                      </div>
+                      <span className="text-[8px] font-mono mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                        {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                  );
+                }) : (
+                  <p className="text-xs font-mono text-center py-8 font-bold" style={{ color: 'var(--text-secondary)' }}>아직 메시지가 없습니다. 첫 메시지를 보내보세요!</p>
+                );
+              })()}
             </div>
-            <textarea value={chatMessage} onChange={(e) => handleChatChange(e.target.value)} placeholder="동료들에게 메시지를 남기세요..." className="w-full h-20 bg-black/60 p-3 text-sm text-blue-300 font-mono outline-none resize-none placeholder:text-zinc-700 border-2 border-blue-800 focus:border-blue-400 transition-colors font-bold" />
+
+            {/* 입력창 + 보내기 버튼 */}
+            <div className="flex items-end gap-2 p-2 border-t-4 border-blue-500" style={{ background: 'var(--bg-secondary)' }}>
+              <textarea
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                placeholder="메시지를 입력하세요..."
+                className="flex-1 h-10 max-h-20 p-2 text-sm font-mono outline-none resize-none border-2 transition-colors font-bold"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
+                rows={1}
+              />
+              <button
+                onClick={sendChatMessage}
+                disabled={!chatMessage.trim()}
+                className="shrink-0 px-4 h-10 font-poster text-sm bg-blue-600 text-white border-2 border-blue-400 shadow-[2px_2px_0px_var(--shadow-color)] hover:bg-blue-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+              >
+                보내기
+              </button>
+            </div>
           </div>
-          {chatEntries.length > 0 && (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {chatEntries.filter(([id]) => id !== participantId).map(([id, entry]) => (
-                <div key={id} className={`border-2 p-3 space-y-1 ${entry.teamNumber === userProfile.teamNumber ? 'border-purple-800 bg-purple-950/20' : ''}`} style={entry.teamNumber !== userProfile.teamNumber ? { borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' } : {}}>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-mono font-bold px-2 py-0.5 border ${entry.teamNumber === userProfile.teamNumber ? 'bg-purple-900/50 text-purple-300 border-purple-700' : ''}`} style={entry.teamNumber !== userProfile.teamNumber ? { background: 'var(--bg-secondary)', color: 'var(--text-primary)', borderColor: 'var(--border-secondary)' } : {}}>
-                      {entry.name}
-                    </span>
-                    <span className="text-[10px] font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>{entry.teamNumber}팀</span>
-                  </div>
-                  <p className="text-sm font-mono whitespace-pre-wrap break-words leading-relaxed pl-1 font-bold" style={{ color: 'var(--text-primary)' }}>{entry.message}</p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* 답안 제출 버튼 (강사가 허용했을 때만) */}
