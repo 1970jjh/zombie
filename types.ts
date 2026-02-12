@@ -53,6 +53,10 @@ export interface Session {
   isMissionStarted: boolean;
   missionStartedAt: number;
   missionDuration: number;
+  // Timer pause support
+  isPaused: boolean;
+  pausedAt: number;
+  pausedElapsed: number;
   // Communication round settings
   teamInternalRounds: number;
   teamCrossRounds: number;

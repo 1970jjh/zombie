@@ -157,6 +157,9 @@ export default function App() {
   const [phaseNotice, setPhaseNotice] = useState<string | null>(null);
   const prevPhaseIdx = useRef<number>(-1);
 
+  // 부저/알람
+  const buzzerPlayedRef = useRef<boolean>(false);
+
   // === 테마 & 전체화면 ===
   useEffect(() => {
     document.body.classList.toggle('theme-day', !isDarkMode);
@@ -201,6 +204,9 @@ export default function App() {
           isMissionStarted: data[key].isMissionStarted || false,
           missionStartedAt: data[key].missionStartedAt || 0,
           missionDuration: data[key].missionDuration || 60,
+          isPaused: data[key].isPaused || false,
+          pausedAt: data[key].pausedAt || 0,
+          pausedElapsed: data[key].pausedElapsed || 0,
           teamInternalRounds: data[key].teamInternalRounds || 3,
           teamCrossRounds: data[key].teamCrossRounds || 3,
           roundDuration: data[key].roundDuration || 5,
@@ -227,16 +233,21 @@ export default function App() {
     if (!activeSession?.isMissionStarted || !activeSession?.missionStartedAt) {
       setMissionElapsed(0);
       prevPhaseIdx.current = -1;
+      buzzerPlayedRef.current = false;
+      return;
+    }
+    if (activeSession.isPaused) {
+      setMissionElapsed(activeSession.pausedElapsed || 0);
       return;
     }
     const tick = () => {
-      const elapsed = Math.floor((Date.now() - activeSession.missionStartedAt) / 1000);
-      setMissionElapsed(elapsed);
+      const rawElapsed = Math.floor((Date.now() - activeSession.missionStartedAt) / 1000);
+      setMissionElapsed(rawElapsed);
     };
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [activeSession?.isMissionStarted, activeSession?.missionStartedAt]);
+  }, [activeSession?.isMissionStarted, activeSession?.missionStartedAt, activeSession?.isPaused, activeSession?.pausedElapsed]);
 
   // 페이즈 전환 감지 (학습자)
   useEffect(() => {
@@ -251,6 +262,57 @@ export default function App() {
     }
     prevPhaseIdx.current = mp.index;
   }, [missionElapsed, activeSession, role]);
+
+  // === 부저/알람: 전체 시간 종료 시 ===
+  useEffect(() => {
+    if (!activeSession?.isMissionStarted || !activeSession?.missionDuration) return;
+    const totalSec = activeSession.missionDuration * 60;
+    if (missionElapsed >= totalSec && !buzzerPlayedRef.current) {
+      buzzerPlayedRef.current = true;
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const playTone = (freq: number, start: number, dur: number) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.type = 'square';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime + start);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + start + dur);
+          osc.start(audioCtx.currentTime + start);
+          osc.stop(audioCtx.currentTime + start + dur);
+        };
+        playTone(880, 0, 0.3);
+        playTone(880, 0.4, 0.3);
+        playTone(1100, 0.8, 0.6);
+      } catch (e) { console.log('Audio not supported'); }
+    }
+    if (missionElapsed < totalSec) {
+      buzzerPlayedRef.current = false;
+    }
+  }, [missionElapsed, activeSession]);
+
+  // === 각 페이즈 종료 시 알림음 ===
+  useEffect(() => {
+    if (!activeSession?.isMissionStarted) return;
+    const mp = computeMissionPhase(activeSession, missionElapsed);
+    if (mp.phaseRemaining <= 0 && mp.phaseRemaining > -2) {
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = 660;
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } catch (e) {}
+    }
+  }, [missionElapsed, activeSession]);
 
   // === 학습자: 결과 발표 감시 ===
   useEffect(() => {
@@ -351,6 +413,9 @@ export default function App() {
         isMissionStarted: false,
         missionStartedAt: 0,
         missionDuration: 60,
+        isPaused: false,
+        pausedAt: 0,
+        pausedElapsed: 0,
         teamInternalRounds: 3,
         teamCrossRounds: 3,
         roundDuration: 5,
@@ -442,6 +507,28 @@ export default function App() {
     }
   };
 
+  const pauseMission = async (id: string) => {
+    try {
+      await update(getSessionRef(id), {
+        isPaused: true,
+        pausedAt: Date.now(),
+        pausedElapsed: missionElapsed
+      });
+    } catch (err) { console.error('타이머 일시정지 실패:', err); }
+  };
+
+  const resumeMission = async (id: string) => {
+    if (!activeSession) return;
+    try {
+      const newStartedAt = Date.now() - (activeSession.pausedElapsed * 1000);
+      await update(getSessionRef(id), {
+        isPaused: false,
+        pausedAt: 0,
+        missionStartedAt: newStartedAt
+      });
+    } catch (err) { console.error('타이머 재개 실패:', err); }
+  };
+
   const revealAnswers = async (id: string) => {
     try { await update(getSessionRef(id), { isAnswerRevealed: true }); }
     catch (err) { console.error('정답 공개 실패:', err); }
@@ -461,6 +548,7 @@ export default function App() {
     try {
       await update(getSessionRef(id), {
         isMissionStarted: false, missionStartedAt: 0, missionDuration: 60,
+        isPaused: false, pausedAt: 0, pausedElapsed: 0,
         isAnswerRevealed: false, isSuccessRevealed: false, isResultReleased: false,
         submissions: {}, participants: {}, liveChat: {}
       });
@@ -487,34 +575,48 @@ export default function App() {
     return isTeamCorrect(mySub);
   }, [activeSession, userProfile.teamNumber]);
 
-  // === 프로세스 스텝 컴포넌트 ===
+  // === 프로세스 스텝 컴포넌트 (가로 꽉찬 사각형 디자인) ===
   const ProcessSteps = ({ session, elapsed }: { session: Session; elapsed: number }) => {
     const totalComm = (session.teamInternalRounds || 3) + (session.teamCrossRounds || 3);
     const roundSec = (session.roundDuration || 5) * 60;
     const currentIdx = Math.min(Math.floor(elapsed / roundSec), totalComm);
 
-    const steps: { label: string; type: string; active: boolean; done: boolean }[] = [];
+    const steps: { label: string; shortLabel: string; type: string; active: boolean; done: boolean; progress: number }[] = [];
     for (let i = 0; i < totalComm; i++) {
       const isInternal = i % 2 === 0;
+      const stepStart = i * roundSec;
+      const stepProgress = i < currentIdx ? 1 : i === currentIdx ? Math.min(1, (elapsed - stepStart) / roundSec) : 0;
       steps.push({
-        label: isInternal ? `팀내${Math.floor(i / 2) + 1}` : `팀간${Math.floor(i / 2) + 1}`,
+        label: isInternal ? `팀 내 소통 ${Math.floor(i / 2) + 1}` : `팀 간 소통 ${Math.floor(i / 2) + 1}`,
+        shortLabel: isInternal ? `팀내${Math.floor(i / 2) + 1}` : `팀간${Math.floor(i / 2) + 1}`,
         type: isInternal ? 'internal' : 'cross',
         active: i === currentIdx,
-        done: i < currentIdx
+        done: i < currentIdx,
+        progress: stepProgress
       });
     }
-    steps.push({ label: '정답제출', type: 'submit', active: currentIdx >= totalComm, done: false });
+    const submitStart = totalComm * roundSec;
+    const submitSec = (session.submitDuration || 10) * 60;
+    const submitProgress = currentIdx >= totalComm ? Math.min(1, (elapsed - submitStart) / submitSec) : 0;
+    steps.push({
+      label: '정답 제출',
+      shortLabel: '정답제출',
+      type: 'submit',
+      active: currentIdx >= totalComm,
+      done: false,
+      progress: submitProgress
+    });
 
     return (
-      <div className="step-indicator">
+      <div className="mission-steps-bar">
         {steps.map((step, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <div className={`step-line ${step.done || step.active ? 'active' : ''}`} />}
-            <div className={`step-badge ${step.active ? 'current' : step.done ? 'done' : 'pending'} ${step.type}`}>
-              {step.done ? '✓' : i + 1}
-              <span className="step-label">{step.label}</span>
+          <div key={i} className={`mission-step ${step.active ? 'active' : step.done ? 'done' : 'pending'} ${step.type}`} style={{ flex: step.type === 'submit' ? 1.3 : 1 }}>
+            <div className="mission-step-fill" style={{ width: `${(step.done ? 1 : step.progress) * 100}%` }} />
+            <div className="mission-step-content">
+              <span className="mission-step-num">{step.done ? '✓' : i + 1}</span>
+              <span className="mission-step-label">{step.shortLabel}</span>
             </div>
-          </React.Fragment>
+          </div>
         ))}
       </div>
     );
@@ -681,14 +783,24 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="w-3 h-3 bg-purple-500 animate-pulse border-2" style={{ borderColor: 'var(--border-primary)' }}></span>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className={`w-3 h-3 ${s.isPaused ? 'bg-yellow-500' : 'bg-purple-500 animate-pulse'} border-2`} style={{ borderColor: 'var(--border-primary)' }}></span>
                       <h3 className="font-poster text-xl" style={{ color: 'var(--text-primary)' }}>미션 진행 현황</h3>
-                      {mp && (
-                        <span className={`ml-auto px-3 py-1 font-mono text-xs font-bold border-2 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-900 border-purple-500 text-purple-300' : mp.type === 'TEAM_CROSS' ? 'bg-blue-900 border-blue-500 text-blue-300' : 'bg-red-900 border-red-500 text-red-300'}`}>
-                          {mp.type === 'TEAM_INTERNAL' ? `팀 내 소통 ${mp.roundNumber}` : mp.type === 'TEAM_CROSS' ? `팀 간 소통 ${mp.roundNumber}` : '정답 제출'} | {formatTimer(Math.floor(mp.phaseRemaining))}
-                        </span>
-                      )}
+                      {s.isPaused && <span className="font-mono text-xs font-bold px-2 py-0.5 bg-yellow-600 text-yellow-100 border-2 border-yellow-400">일시정지</span>}
+                      <div className="ml-auto flex items-center gap-2">
+                        <button
+                          onClick={() => s.isPaused ? resumeMission(s.id) : pauseMission(s.id)}
+                          className={`px-4 py-2 font-poster text-sm border-3 transition-all ${s.isPaused ? 'bg-emerald-600 border-emerald-400 text-white hover:bg-emerald-500' : 'bg-yellow-600 border-yellow-400 text-white hover:bg-yellow-500'}`}
+                          style={{ boxShadow: '3px 3px 0px var(--shadow-color)' }}
+                        >
+                          {s.isPaused ? '▶ 재개' : '⏸ 일시정지'}
+                        </button>
+                        {mp && (
+                          <span className={`px-3 py-1 font-mono text-xs font-bold border-2 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-900 border-purple-500 text-purple-300' : mp.type === 'TEAM_CROSS' ? 'bg-blue-900 border-blue-500 text-blue-300' : 'bg-red-900 border-red-500 text-red-300'}`}>
+                            {mp.type === 'TEAM_INTERNAL' ? `팀 내 소통 ${mp.roundNumber}` : mp.type === 'TEAM_CROSS' ? `팀 간 소통 ${mp.roundNumber}` : '정답 제출'} | {formatTimer(Math.floor(mp.phaseRemaining))}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <ProcessSteps session={s} elapsed={missionElapsed} />
                     <ProgressBar session={s} />
@@ -1044,8 +1156,15 @@ export default function App() {
           </div>
         )}
 
+        {/* 일시정지 배너 */}
+        {activeSession?.isPaused && (
+          <div className="sticky top-20 z-[95] -mx-5 px-5 py-3 bg-yellow-600 border-b-4 border-yellow-400 text-center">
+            <span className="font-poster text-lg text-white">⏸ 타이머 일시정지 중</span>
+          </div>
+        )}
+
         {/* 페이즈 바 (상단 고정) */}
-        {mp && (
+        {mp && !activeSession?.isPaused && (
           <div className={`sticky top-20 z-[90] -mx-5 px-5 py-3 border-b-4 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-950/95 border-purple-500' : mp.type === 'TEAM_CROSS' ? 'bg-blue-950/95 border-blue-500' : 'bg-red-950/95 border-red-500'}`} style={{ backdropFilter: 'blur(10px)' }}>
             <div className="flex justify-between items-center">
               <div>
