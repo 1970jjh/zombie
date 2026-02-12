@@ -43,6 +43,7 @@ export interface ChatEntry {
   name: string;
   teamNumber: number;
   message: string;
+  timestamp: number;
 }
 
 export interface PersonalNote {
