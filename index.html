@@ -222,80 +222,84 @@
                    drop-shadow(0 0 24px rgba(124, 58, 237, 0.3));
         }
 
-        /* ===== 프로세스 스텝 ===== */
-        .step-indicator {
+        /* ===== 미션 진행 스텝 (가로 꽉찬 사각형) ===== */
+        .mission-steps-bar {
             display: flex;
-            align-items: center;
-            gap: 2px;
-            overflow-x: auto;
-            padding: 8px 0;
-            scrollbar-width: none;
+            width: 100%;
+            gap: 3px;
         }
-        .step-indicator::-webkit-scrollbar { display: none; }
-
-        .step-line {
-            width: 16px;
-            height: 3px;
-            background: var(--border-secondary);
-            flex-shrink: 0;
-            transition: background 0.3s;
-        }
-        .step-line.active {
-            background: #a855f7;
-        }
-
-        .step-badge {
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-            width: 48px;
-            height: 48px;
-            justify-content: center;
-            font-family: 'Space Mono', monospace;
-            font-weight: 700;
-            font-size: 12px;
+        .mission-step {
+            position: relative;
+            height: 52px;
             border: 3px solid var(--border-secondary);
             background: var(--bg-card);
-            color: var(--text-secondary);
+            overflow: hidden;
             transition: all 0.3s;
         }
-        .step-badge .step-label {
-            font-size: 8px;
-            font-family: 'Noto Sans KR', sans-serif;
-            line-height: 1;
+        .mission-step-fill {
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            transition: width 1s linear;
         }
-        .step-badge.done {
-            background: #581c87;
-            border-color: #7c3aed;
-            color: #d8b4fe;
+        .mission-step.done .mission-step-fill {
+            width: 100% !important;
         }
-        .step-badge.done.cross {
-            background: #1e3a5f;
-            border-color: #3b82f6;
-            color: #93c5fd;
+        /* 팀 내: 보라 */
+        .mission-step.done.internal { border-color: #7c3aed; background: #581c87; }
+        .mission-step.done.internal .mission-step-fill { background: #7c3aed; opacity: 0.3; }
+        .mission-step.active.internal { border-color: #a855f7; box-shadow: 0 0 12px rgba(168,85,247,0.4); }
+        .mission-step.active.internal .mission-step-fill { background: linear-gradient(90deg, #7c3aed, #a855f7); opacity: 0.35; }
+        /* 팀 간: 블루 */
+        .mission-step.done.cross { border-color: #3b82f6; background: #1e3a5f; }
+        .mission-step.done.cross .mission-step-fill { background: #3b82f6; opacity: 0.3; }
+        .mission-step.active.cross { border-color: #60a5fa; box-shadow: 0 0 12px rgba(59,130,246,0.4); }
+        .mission-step.active.cross .mission-step-fill { background: linear-gradient(90deg, #2563eb, #60a5fa); opacity: 0.35; }
+        /* 정답제출: 레드 */
+        .mission-step.done.submit { border-color: #ef4444; background: #7f1d1d; }
+        .mission-step.done.submit .mission-step-fill { background: #ef4444; opacity: 0.3; }
+        .mission-step.active.submit { border-color: #f87171; box-shadow: 0 0 12px rgba(239,68,68,0.4); }
+        .mission-step.active.submit .mission-step-fill { background: linear-gradient(90deg, #dc2626, #f87171); opacity: 0.35; }
+        /* pending */
+        .mission-step.pending { opacity: 0.45; }
+
+        .mission-step-content {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 100%;
+            padding: 0 8px;
         }
-        .step-badge.current {
-            border-color: #a855f7;
-            background: #7c3aed;
+        .mission-step-num {
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-secondary);
+        }
+        .mission-step.done .mission-step-num,
+        .mission-step.active .mission-step-num {
             color: #fff;
-            box-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
-            animation: step-pulse 1.5s ease-in-out infinite;
         }
-        .step-badge.current.cross {
-            border-color: #60a5fa;
-            background: #2563eb;
-            box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+        .mission-step-label {
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            white-space: nowrap;
         }
-        .step-badge.current.submit {
-            border-color: #f87171;
-            background: #dc2626;
-            box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+        .mission-step.done .mission-step-label { color: #d8b4fe; }
+        .mission-step.done.cross .mission-step-label { color: #93c5fd; }
+        .mission-step.done.submit .mission-step-label { color: #fca5a5; }
+        .mission-step.active .mission-step-label { color: #fff; }
+
+        .mission-step.active {
+            animation: step-glow 1.5s ease-in-out infinite;
         }
-        @keyframes step-pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.08); }
+        @keyframes step-glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.15); }
         }
     </style>
 <script type="importmap">
