@@ -771,13 +771,13 @@ export default function App() {
     if (!isAdminAuth) {
       return (
         <div className="flex items-center justify-center min-h-[80vh] px-6">
-          <form onSubmit={handleAdminLogin} className="brutal-card p-10 w-full max-w-sm space-y-6">
-            <h2 className="text-3xl font-poster tracking-tighter text-center" style={{ color: 'var(--text-primary)' }}>관리자 로그인</h2>
+          <form onSubmit={handleAdminLogin} className="brutal-card p-10 w-full max-w-md space-y-6">
+            <h2 className="text-4xl font-poster tracking-tighter text-center" style={{ color: 'var(--text-primary)' }}>관리자 로그인</h2>
             <div className="space-y-2">
-              <label className="text-xs font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>비밀번호를 입력하세요</label>
-              <input type="password" value={adminPassInput} onChange={(e) => setAdminPassInput(e.target.value)} placeholder="비밀번호" className="brutal-input w-full text-center tracking-widest text-2xl font-poster" />
+              <label className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>비밀번호를 입력하세요</label>
+              <input type="password" value={adminPassInput} onChange={(e) => setAdminPassInput(e.target.value)} placeholder="비밀번호" className="brutal-input w-full text-center tracking-widest text-3xl font-poster" />
             </div>
-            <button className="brutal-btn w-full py-4 text-xl">로그인</button>
+            <button className="brutal-btn w-full py-4 text-2xl">로그인</button>
           </form>
         </div>
       );
@@ -813,22 +813,22 @@ export default function App() {
           <div className="border-b-4 px-6 py-4" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-secondary)' }}>
             <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-4 min-w-0">
-                <button onClick={() => { setAdminView('hub'); setExpandedTeamMemo(null); }} className="font-mono text-base font-bold shrink-0 hover:opacity-70" style={{ color: 'var(--text-secondary)' }}>&larr; 목록</button>
+                <button onClick={() => { setAdminView('hub'); setExpandedTeamMemo(null); }} className="font-mono text-lg font-bold shrink-0 hover:opacity-70" style={{ color: 'var(--text-secondary)' }}>&larr; 목록</button>
                 <div className="min-w-0">
-                  <h2 className="font-poster text-3xl truncate" style={{ color: 'var(--text-primary)' }}>{s.groupName}</h2>
+                  <h2 className="font-poster text-4xl truncate" style={{ color: 'var(--text-primary)' }}>{s.groupName}</h2>
                   <div className="flex gap-4 items-center mt-1">
-                    <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>코드: <span style={{ color: 'var(--text-primary)' }}>{s.id}</span></span>
-                    <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>참가: <span style={{ color: 'var(--text-primary)' }}>{totalParticipants}명</span></span>
-                    <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>제출: <span className="text-emerald-500">{submittedCount}</span>/{s.teamCount}</span>
+                    <span className="font-mono text-base font-bold" style={{ color: 'var(--text-secondary)' }}>코드: <span style={{ color: 'var(--text-primary)' }}>{s.id}</span></span>
+                    <span className="font-mono text-base font-bold" style={{ color: 'var(--text-secondary)' }}>참가: <span style={{ color: 'var(--text-primary)' }}>{totalParticipants}명</span></span>
+                    <span className="font-mono text-base font-bold" style={{ color: 'var(--text-secondary)' }}>제출: <span className="text-emerald-500">{submittedCount}</span>/{s.teamCount}</span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                <button onClick={() => toggleSessionOpen(s.id)} className={`px-5 py-2.5 font-poster text-base border-4 transition-all ${s.isOpen ? 'bg-emerald-600 border-emerald-400 text-white shadow-[3px_3px_0px_var(--shadow-color)]' : 'border-2 shadow-[3px_3px_0px_var(--shadow-color)]'}`} style={!s.isOpen ? { background: 'var(--bg-card)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' } : {}}>
+                <button onClick={() => toggleSessionOpen(s.id)} className={`px-5 py-2.5 font-poster text-lg border-4 transition-all ${s.isOpen ? 'bg-emerald-600 border-emerald-400 text-white shadow-[3px_3px_0px_var(--shadow-color)]' : 'border-2 shadow-[3px_3px_0px_var(--shadow-color)]'}`} style={!s.isOpen ? { background: 'var(--bg-card)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' } : {}}>
                   {s.isOpen ? '입장 허용 중' : '입장 대기'}
                 </button>
-                <button onClick={() => resetSession(s.id)} className="px-3 py-2.5 font-mono text-sm font-bold border-2 hover:opacity-70" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}>초기화</button>
-                <button onClick={() => deleteSession(s.id)} className="px-3 py-2.5 font-mono text-sm font-bold bg-red-950 border-2 border-red-800 text-red-400 hover:text-white hover:border-red-500 transition-colors">삭제</button>
+                <button onClick={() => resetSession(s.id)} className="px-4 py-2.5 font-mono text-base font-bold border-2 hover:opacity-70" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}>초기화</button>
+                <button onClick={() => deleteSession(s.id)} className="px-4 py-2.5 font-mono text-base font-bold bg-red-950 border-2 border-red-800 text-red-400 hover:text-white hover:border-red-500 transition-colors">삭제</button>
               </div>
             </div>
           </div>
@@ -842,44 +842,44 @@ export default function App() {
                 {!s.isMissionStarted ? (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <HerbIcon size={24} />
-                      <h3 className="font-poster text-xl" style={{ color: 'var(--text-primary)' }}>미션 설정</h3>
+                      <HerbIcon size={28} />
+                      <h3 className="font-poster text-2xl" style={{ color: 'var(--text-primary)' }}>미션 설정</h3>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>팀 내 소통</label>
-                        <select value={cfgInternalRounds} onChange={e => setCfgInternalRounds(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-lg">
+                        <label className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>팀 내 소통</label>
+                        <select value={cfgInternalRounds} onChange={e => setCfgInternalRounds(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-xl">
                           {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}회</option>)}
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>팀 간 소통</label>
-                        <select value={cfgCrossRounds} onChange={e => setCfgCrossRounds(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-lg">
+                        <label className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>팀 간 소통</label>
+                        <select value={cfgCrossRounds} onChange={e => setCfgCrossRounds(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-xl">
                           {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}회</option>)}
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>라운드 시간</label>
-                        <select value={cfgRoundDuration} onChange={e => setCfgRoundDuration(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-lg">
+                        <label className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>라운드 시간</label>
+                        <select value={cfgRoundDuration} onChange={e => setCfgRoundDuration(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-xl">
                           {[3, 5, 7, 10, 15, 20].map(n => <option key={n} value={n}>{n}분</option>)}
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>제출 시간</label>
-                        <select value={cfgSubmitDuration} onChange={e => setCfgSubmitDuration(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-lg">
+                        <label className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>제출 시간</label>
+                        <select value={cfgSubmitDuration} onChange={e => setCfgSubmitDuration(+e.target.value)} className="brutal-input w-full py-2 text-center font-poster text-xl">
                           {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n}분</option>)}
                         </select>
                       </div>
                     </div>
                     <div className="flex items-center justify-between pt-3 border-t-2" style={{ borderColor: 'var(--border-secondary)' }}>
                       <div>
-                        <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>총 소요 시간: </span>
-                        <span className="font-poster text-xl text-purple-400">{(cfgInternalRounds + cfgCrossRounds) * cfgRoundDuration + cfgSubmitDuration}분</span>
-                        <span className="font-mono text-[10px] ml-2" style={{ color: 'var(--text-secondary)' }}>
+                        <span className="font-mono text-base font-bold" style={{ color: 'var(--text-secondary)' }}>총 소요 시간: </span>
+                        <span className="font-poster text-2xl text-purple-400">{(cfgInternalRounds + cfgCrossRounds) * cfgRoundDuration + cfgSubmitDuration}분</span>
+                        <span className="font-mono text-xs ml-2" style={{ color: 'var(--text-secondary)' }}>
                           (팀내{cfgInternalRounds} + 팀간{cfgCrossRounds}) × {cfgRoundDuration}분 + 제출{cfgSubmitDuration}분
                         </span>
                       </div>
-                      <button onClick={() => startMission(s.id)} className="px-8 py-3 font-poster text-xl border-4 bg-purple-600 border-purple-400 text-white shadow-[4px_4px_0px_var(--shadow-color)] hover:bg-purple-500 animate-pulse transition-all">
+                      <button onClick={() => startMission(s.id)} className="px-8 py-3 font-poster text-2xl border-4 bg-purple-600 border-purple-400 text-white shadow-[4px_4px_0px_var(--shadow-color)] hover:bg-purple-500 animate-pulse transition-all">
                         미션 시작
                       </button>
                     </div>
@@ -888,10 +888,10 @@ export default function App() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className={`w-3 h-3 ${s.isPhasePaused ? 'bg-yellow-500' : 'bg-purple-500 animate-pulse'} border-2`} style={{ borderColor: 'var(--border-primary)' }}></span>
-                      <h3 className="font-poster text-xl" style={{ color: 'var(--text-primary)' }}>미션 진행 현황</h3>
-                      {s.isPhasePaused && <span className="font-mono text-xs font-bold px-2 py-0.5 bg-yellow-600 text-yellow-100 border-2 border-yellow-400">일시정지</span>}
+                      <h3 className="font-poster text-2xl" style={{ color: 'var(--text-primary)' }}>미션 진행 현황</h3>
+                      {s.isPhasePaused && <span className="font-mono text-sm font-bold px-2 py-0.5 bg-yellow-600 text-yellow-100 border-2 border-yellow-400">일시정지</span>}
                       {mp && (
-                        <span className={`px-3 py-1 font-mono text-xs font-bold border-2 ml-2 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-900 border-purple-500 text-purple-300' : mp.type === 'TEAM_CROSS' ? 'bg-blue-900 border-blue-500 text-blue-300' : 'bg-red-900 border-red-500 text-red-300'}`}>
+                        <span className={`px-3 py-1 font-mono text-sm font-bold border-2 ml-2 ${mp.type === 'TEAM_INTERNAL' ? 'bg-purple-900 border-purple-500 text-purple-300' : mp.type === 'TEAM_CROSS' ? 'bg-blue-900 border-blue-500 text-blue-300' : 'bg-red-900 border-red-500 text-red-300'}`}>
                           {mp.type === 'TEAM_INTERNAL' ? `팀 내 소통 ${mp.roundNumber}` : mp.type === 'TEAM_CROSS' ? `팀 간 소통 ${mp.roundNumber}` : '정답 제출'} | {formatTimer(Math.floor(mp.phaseRemaining))}
                         </span>
                       )}
@@ -907,21 +907,38 @@ export default function App() {
                         const isNext = idx === currentIdx + 1;
                         const phaseColor = phase.type === 'internal' ? 'purple' : phase.type === 'cross' ? 'blue' : 'red';
                         const phaseTimeExpired = isActive && mp && mp.phaseRemaining <= 0;
+                        const currentDuration = phase.type === 'submit' ? (s.submitDuration || 10) : (s.roundDuration || 5);
 
                         return (
                           <div key={idx} className={`flex items-center gap-3 px-4 py-3 border-2 transition-all ${isDone ? 'opacity-60' : ''} ${isActive ? `border-${phaseColor}-500` : ''}`} style={{ borderColor: isActive ? undefined : 'var(--border-secondary)', background: isActive ? (phase.type === 'internal' ? 'rgba(124,58,237,0.15)' : phase.type === 'cross' ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.15)') : 'var(--bg-secondary)' }}>
-                            <span className={`w-8 h-8 flex items-center justify-center font-poster text-sm border-2 ${isDone ? 'bg-emerald-600 border-emerald-400 text-white' : isActive ? `bg-${phaseColor}-600 border-${phaseColor}-400 text-white` : ''}`} style={!isDone && !isActive ? { background: 'var(--bg-card)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' } : {}}>
+                            <span className={`w-9 h-9 flex items-center justify-center font-poster text-base border-2 ${isDone ? 'bg-emerald-600 border-emerald-400 text-white' : isActive ? `bg-${phaseColor}-600 border-${phaseColor}-400 text-white` : ''}`} style={!isDone && !isActive ? { background: 'var(--bg-card)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' } : {}}>
                               {isDone ? '✓' : idx + 1}
                             </span>
-                            <span className={`font-poster text-base flex-1 ${isActive ? 'text-white' : ''}`} style={!isActive ? { color: 'var(--text-primary)' } : {}}>
+                            <span className={`font-poster text-lg flex-1 ${isActive ? 'text-white' : ''}`} style={!isActive ? { color: 'var(--text-primary)' } : {}}>
                               {phase.label}
                             </span>
-                            <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
-                              {phase.type === 'submit' ? `${s.submitDuration || 10}분` : `${s.roundDuration || 5}분`}
-                            </span>
+                            {/* 시간 수정 가능한 셀렉트 */}
+                            <select
+                              value={currentDuration}
+                              onChange={async (e) => {
+                                const val = +e.target.value;
+                                const totalComm = (s.teamInternalRounds || 3) + (s.teamCrossRounds || 3);
+                                if (phase.type === 'submit') {
+                                  const newTotal = totalComm * (s.roundDuration || 5) + val;
+                                  try { await update(getSessionRef(s.id), { submitDuration: val, missionDuration: newTotal }); } catch (err) { console.error('시간 변경 실패:', err); }
+                                } else {
+                                  const newTotal = totalComm * val + (s.submitDuration || 10);
+                                  try { await update(getSessionRef(s.id), { roundDuration: val, missionDuration: newTotal }); } catch (err) { console.error('시간 변경 실패:', err); }
+                                }
+                              }}
+                              className="font-mono text-sm font-bold border-2 px-2 py-1 appearance-none text-center cursor-pointer"
+                              style={{ background: 'var(--bg-input)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)', minWidth: '65px' }}
+                            >
+                              {[1, 2, 3, 5, 7, 10, 15, 20, 25, 30].map(n => <option key={n} value={n}>{n}분</option>)}
+                            </select>
                             {/* 현재 활성 페이즈 타이머 */}
                             {isActive && mp && (
-                              <span className={`font-mono text-lg font-bold ${phaseTimeExpired ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+                              <span className={`font-mono text-xl font-bold ${phaseTimeExpired ? 'text-red-400 animate-pulse' : 'text-white'}`}>
                                 {phaseTimeExpired ? '시간 종료!' : formatTimer(Math.floor(mp.phaseRemaining))}
                               </span>
                             )}
@@ -930,7 +947,7 @@ export default function App() {
                               {isActive && !phaseTimeExpired && (
                                 <button
                                   onClick={() => s.isPhasePaused ? resumePhase(s.id) : pausePhase(s.id)}
-                                  className={`px-3 py-1.5 font-poster text-sm border-2 transition-all ${s.isPhasePaused ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-yellow-600 border-yellow-400 text-white'}`}
+                                  className={`px-3 py-1.5 font-poster text-base border-2 transition-all ${s.isPhasePaused ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-yellow-600 border-yellow-400 text-white'}`}
                                 >
                                   {s.isPhasePaused ? '▶' : '⏸'}
                                 </button>
@@ -938,7 +955,7 @@ export default function App() {
                               {(isNext || (isPending && idx === 0 && currentIdx === -1)) && (
                                 <button
                                   onClick={() => startPhase(s.id, idx)}
-                                  className={`px-4 py-1.5 font-poster text-sm border-2 bg-${phaseColor}-600 border-${phaseColor}-400 text-white hover:opacity-80 transition-all animate-pulse`}
+                                  className={`px-4 py-1.5 font-poster text-base border-2 bg-${phaseColor}-600 border-${phaseColor}-400 text-white hover:opacity-80 transition-all animate-pulse`}
                                 >
                                   ▶ 시작
                                 </button>
@@ -946,7 +963,7 @@ export default function App() {
                               {isActive && phaseTimeExpired && idx < allPhaseLabels.length - 1 && (
                                 <button
                                   onClick={() => startPhase(s.id, idx + 1)}
-                                  className="px-4 py-1.5 font-poster text-sm border-2 bg-emerald-600 border-emerald-400 text-white hover:opacity-80 transition-all animate-pulse"
+                                  className="px-4 py-1.5 font-poster text-base border-2 bg-emerald-600 border-emerald-400 text-white hover:opacity-80 transition-all animate-pulse"
                                 >
                                   다음 ▶
                                 </button>
@@ -961,14 +978,14 @@ export default function App() {
                     <div className="flex items-center justify-between pt-3 border-t-2" style={{ borderColor: 'var(--border-secondary)' }}>
                       <div className="flex items-center gap-2">
                         <span className={`w-3 h-3 ${s.isSubmitEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-red-600'} border-2`} style={{ borderColor: 'var(--border-primary)' }}></span>
-                        <span className="font-poster text-base" style={{ color: 'var(--text-primary)' }}>정답 제출</span>
-                        <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
+                        <span className="font-poster text-lg" style={{ color: 'var(--text-primary)' }}>정답 제출</span>
+                        <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>
                           {s.isSubmitEnabled ? '학습자 제출 가능' : '학습자 제출 불가'}
                         </span>
                       </div>
                       <button
                         onClick={() => toggleSubmitEnabled(s.id)}
-                        className={`px-5 py-2 font-poster text-sm border-3 transition-all ${s.isSubmitEnabled ? 'bg-red-600 border-red-400 text-white' : 'bg-emerald-600 border-emerald-400 text-white'}`}
+                        className={`px-5 py-2 font-poster text-base border-3 transition-all ${s.isSubmitEnabled ? 'bg-red-600 border-red-400 text-white' : 'bg-emerald-600 border-emerald-400 text-white'}`}
                         style={{ boxShadow: '3px 3px 0px var(--shadow-color)' }}
                       >
                         {s.isSubmitEnabled ? '제출 잠금' : '제출 허용'}
@@ -983,7 +1000,7 @@ export default function App() {
 
               {/* === 조별 현황 (왼쪽) === */}
               <div className="col-span-12 lg:col-span-7 bento-card">
-                <h3 className="font-poster text-lg mb-3" style={{ color: 'var(--text-primary)' }}>조별 현황</h3>
+                <h3 className="font-poster text-xl mb-3" style={{ color: 'var(--text-primary)' }}>조별 현황</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {Array.from({ length: s.teamCount }, (_, i) => i + 1).map(tNum => {
                     const teamP = s.participants.filter(p => p.teamNumber === tNum);
@@ -993,9 +1010,9 @@ export default function App() {
                     return (
                       <div key={tNum} className={`border-3 transition-all ${hasSub ? 'border-emerald-500 bg-emerald-950/30' : ''}`} style={!hasSub ? { borderColor: 'var(--border-secondary)', background: 'var(--bg-card)', borderWidth: '3px' } : { borderWidth: '3px' }}>
                         <div className={`px-3 py-2 flex justify-between items-center ${hasSub ? 'bg-emerald-900/40' : ''}`} style={!hasSub ? { background: 'var(--bg-secondary)' } : {}}>
-                          <span className="font-poster text-lg" style={{ color: hasSub ? '#fff' : 'var(--text-primary)' }}>{tNum}팀</span>
+                          <span className="font-poster text-xl" style={{ color: hasSub ? '#fff' : 'var(--text-primary)' }}>{tNum}팀</span>
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-[11px] font-bold" style={{ color: 'var(--text-secondary)' }}>{teamP.length}명</span>
+                            <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>{teamP.length}명</span>
                             {hasSub && <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>}
                           </div>
                         </div>
@@ -1003,21 +1020,21 @@ export default function App() {
                           {teamP.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {teamP.map((p, idx) => (
-                                <span key={idx} className="text-[11px] font-mono font-bold px-2 py-0.5 border" style={{ background: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}>{p.name}</span>
+                                <span key={idx} className="text-sm font-mono font-bold px-2 py-0.5 border" style={{ background: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}>{p.name}</span>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[11px] font-mono italic" style={{ color: 'var(--text-secondary)' }}>대기 중</span>
+                            <span className="text-sm font-mono italic" style={{ color: 'var(--text-secondary)' }}>대기 중</span>
                           )}
                         </div>
                         <div className="border-t" style={{ borderColor: 'var(--border-secondary)' }}>
-                          <button onClick={() => setExpandedTeamMemo(isMemoOpen ? null : tNum)} className="w-full px-3 py-2 flex justify-between items-center text-[11px] font-mono font-bold hover:opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                          <button onClick={() => setExpandedTeamMemo(isMemoOpen ? null : tNum)} className="w-full px-3 py-2 flex justify-between items-center text-sm font-mono font-bold hover:opacity-70" style={{ color: 'var(--text-secondary)' }}>
                             <span>메모</span><span>{isMemoOpen ? '▲' : '▼'}</span>
                           </button>
                           {isMemoOpen && (
                             <div className="px-3 pb-2">
                               <div className="border p-2 max-h-24 overflow-y-auto" style={{ background: 'var(--bg-input)', borderColor: 'var(--border-secondary)' }}>
-                                <pre className="text-[11px] font-mono text-green-500 whitespace-pre-wrap break-words">{teamMemo || '(없음)'}</pre>
+                                <pre className="text-sm font-mono text-green-500 whitespace-pre-wrap break-words">{teamMemo || '(없음)'}</pre>
                               </div>
                             </div>
                           )}
@@ -1030,34 +1047,34 @@ export default function App() {
 
               {/* === 조별 답안 (오른쪽) === */}
               <div className="col-span-12 lg:col-span-5 bento-card">
-                <h3 className="font-poster text-lg mb-3" style={{ color: 'var(--text-primary)' }}>조별 답안</h3>
+                <h3 className="font-poster text-xl mb-3" style={{ color: 'var(--text-primary)' }}>조별 답안</h3>
                 <div className="space-y-2 mb-4">
                   {Array.from({ length: s.teamCount }, (_, i) => i + 1).map(tNum => {
                     const sub = s.submissions[tNum];
                     const correct = sub ? isTeamCorrect(sub) : false;
                     return (
                       <div key={tNum} className="flex items-center gap-3 px-3 py-2.5 border-2" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)' }}>
-                        <span className="font-poster text-base w-10 shrink-0" style={{ color: 'var(--text-primary)' }}>{tNum}팀</span>
+                        <span className="font-poster text-lg w-12 shrink-0" style={{ color: 'var(--text-primary)' }}>{tNum}팀</span>
                         {sub ? (
                           <>
                             {!s.isAnswerRevealed ? (
-                              <span className="font-mono text-sm font-bold px-3 py-1 bg-zinc-800 text-zinc-400 border border-zinc-700">비공개</span>
+                              <span className="font-mono text-base font-bold px-3 py-1 bg-zinc-800 text-zinc-400 border border-zinc-700">비공개</span>
                             ) : (
-                              <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                              <span className="font-mono text-base font-bold" style={{ color: 'var(--text-primary)' }}>
                                 {sub.day} {sub.ampm} {sub.hour}:{sub.minute}
                               </span>
                             )}
                             {s.isSuccessRevealed && (
-                              <span className={`ml-auto font-poster text-sm px-2 py-0.5 border-2 ${correct ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-red-700 border-red-500 text-white'}`}>
+                              <span className={`ml-auto font-poster text-base px-2 py-0.5 border-2 ${correct ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-red-700 border-red-500 text-white'}`}>
                                 {correct ? '성공' : '실패'}
                               </span>
                             )}
                             {!s.isSuccessRevealed && s.isAnswerRevealed && (
-                              <span className="ml-auto font-mono text-[10px] text-zinc-500">({sub.userName})</span>
+                              <span className="ml-auto font-mono text-xs text-zinc-500">({sub.userName})</span>
                             )}
                           </>
                         ) : (
-                          <span className="font-mono text-sm italic" style={{ color: 'var(--text-secondary)' }}>미제출</span>
+                          <span className="font-mono text-base italic" style={{ color: 'var(--text-secondary)' }}>미제출</span>
                         )}
                       </div>
                     );
@@ -1067,30 +1084,30 @@ export default function App() {
                 {/* 컨트롤 버튼 */}
                 <div className="flex flex-wrap gap-2 pt-3 border-t-2" style={{ borderColor: 'var(--border-secondary)' }}>
                   {!s.isAnswerRevealed && (
-                    <button onClick={() => revealAnswers(s.id)} disabled={submittedCount === 0} className="px-5 py-2.5 font-poster text-base border-4 bg-purple-600 border-purple-400 text-white shadow-[3px_3px_0px_var(--shadow-color)] hover:bg-purple-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                    <button onClick={() => revealAnswers(s.id)} disabled={submittedCount === 0} className="px-5 py-2.5 font-poster text-lg border-4 bg-purple-600 border-purple-400 text-white shadow-[3px_3px_0px_var(--shadow-color)] hover:bg-purple-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
                       정답 확인
                     </button>
                   )}
                   {s.isAnswerRevealed && !s.isSuccessRevealed && (
-                    <button onClick={() => revealSuccess(s.id)} className="px-5 py-2.5 font-poster text-base border-4 bg-yellow-500 border-yellow-300 text-black shadow-[3px_3px_0px_var(--shadow-color)] hover:bg-yellow-400 transition-all">
+                    <button onClick={() => revealSuccess(s.id)} className="px-5 py-2.5 font-poster text-lg border-4 bg-yellow-500 border-yellow-300 text-black shadow-[3px_3px_0px_var(--shadow-color)] hover:bg-yellow-400 transition-all">
                       성공여부
                     </button>
                   )}
                   {s.isSuccessRevealed && !s.isResultReleased && (
-                    <button onClick={() => releaseResults(s.id)} className="px-5 py-2.5 font-poster text-base border-4 bg-red-600 border-white text-white shadow-[3px_3px_0px_var(--shadow-color)] hover:shadow-[5px_5px_0px_var(--shadow-color)] transition-all">
+                    <button onClick={() => releaseResults(s.id)} className="px-5 py-2.5 font-poster text-lg border-4 bg-red-600 border-white text-white shadow-[3px_3px_0px_var(--shadow-color)] hover:shadow-[5px_5px_0px_var(--shadow-color)] transition-all">
                       결과 공유
                     </button>
                   )}
                   {s.isResultReleased && (
-                    <span className="font-mono text-sm text-emerald-500 font-bold animate-pulse py-2">학습자 화면에 결과가 표시되었습니다</span>
+                    <span className="font-mono text-base text-emerald-500 font-bold animate-pulse py-2">학습자 화면에 결과가 표시되었습니다</span>
                   )}
                 </div>
 
                 {/* 정답 표시 */}
                 {s.isSuccessRevealed && (
                   <div className="mt-3 px-3 py-2 border-2 border-yellow-600 bg-yellow-950/30">
-                    <span className="font-mono text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>정답: </span>
-                    <span className="font-mono text-sm text-yellow-400 font-bold">{CORRECT_ANSWER.day} {CORRECT_ANSWER.ampm} {CORRECT_ANSWER.hour}:{CORRECT_ANSWER.minute}</span>
+                    <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>정답: </span>
+                    <span className="font-mono text-base text-yellow-400 font-bold">{CORRECT_ANSWER.day} {CORRECT_ANSWER.ampm} {CORRECT_ANSWER.hour}:{CORRECT_ANSWER.minute}</span>
                   </div>
                 )}
               </div>
@@ -1098,19 +1115,19 @@ export default function App() {
               {/* === 순위표 (성공여부 공개 후) === */}
               {s.isSuccessRevealed && correctTeams.length > 0 && (
                 <div className="col-span-12 bento-card border-yellow-600" style={{ borderColor: '#ca8a04' }}>
-                  <h3 className="font-poster text-lg mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                    <span className="text-2xl">🏆</span> 순위표
+                  <h3 className="font-poster text-xl mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                    <span className="text-3xl">🏆</span> 순위표
                   </h3>
                   <div className="space-y-2">
                     {correctTeams.map(([teamNum, sub], idx) => {
                       const elapsed = sub.submittedAt && s.missionStartedAt ? Math.floor((sub.submittedAt - s.missionStartedAt) / 1000) : 0;
                       return (
                         <div key={teamNum} className={`flex items-center gap-4 px-4 py-3 border-2 ${idx === 0 ? 'border-yellow-500 bg-yellow-950/30' : idx === 1 ? 'border-zinc-400 bg-zinc-900/30' : idx === 2 ? 'border-amber-700 bg-amber-950/20' : ''}`} style={idx > 2 ? { borderColor: 'var(--border-secondary)', background: 'var(--bg-secondary)' } : {}}>
-                          <span className={`font-poster text-2xl w-10 text-center ${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-zinc-300' : idx === 2 ? 'text-amber-600' : ''}`} style={idx > 2 ? { color: 'var(--text-secondary)' } : {}}>
+                          <span className={`font-poster text-3xl w-12 text-center ${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-zinc-300' : idx === 2 ? 'text-amber-600' : ''}`} style={idx > 2 ? { color: 'var(--text-secondary)' } : {}}>
                             {idx + 1}위
                           </span>
-                          <span className="font-poster text-xl" style={{ color: 'var(--text-primary)' }}>{teamNum}팀</span>
-                          <span className="font-mono text-sm font-bold ml-auto" style={{ color: 'var(--text-secondary)' }}>
+                          <span className="font-poster text-2xl" style={{ color: 'var(--text-primary)' }}>{teamNum}팀</span>
+                          <span className="font-mono text-base font-bold ml-auto" style={{ color: 'var(--text-secondary)' }}>
                             소요: {formatTimer(elapsed)}
                           </span>
                         </div>
@@ -1130,28 +1147,28 @@ export default function App() {
     return (
       <div className="p-6 max-w-5xl mx-auto animate-fade-in space-y-8 pb-32">
         <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-poster tracking-tighter" style={{ color: 'var(--text-primary)' }}>세션 관리</h2>
-          <button onClick={() => setIsAdminAuth(false)} className="font-mono text-sm text-red-500 underline font-bold">로그아웃</button>
+          <h2 className="text-4xl font-poster tracking-tighter" style={{ color: 'var(--text-primary)' }}>세션 관리</h2>
+          <button onClick={() => setIsAdminAuth(false)} className="font-mono text-base text-red-500 underline font-bold">로그아웃</button>
         </div>
 
         <div className="border-4 p-6" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' }}>
           <form onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); createSession(fd.get('name') as string, parseInt(fd.get('teams') as string)); e.currentTarget.reset(); }} className="flex items-end gap-4">
             <div className="flex-1 space-y-1">
-              <label className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>과정명</label>
-              <input name="name" required placeholder="교육 과정명을 입력하세요" className="brutal-input w-full text-base py-3" />
+              <label className="text-base font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>과정명</label>
+              <input name="name" required placeholder="교육 과정명을 입력하세요" className="brutal-input w-full text-lg py-3" />
             </div>
-            <div className="w-32 space-y-1">
-              <label className="text-sm font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>팀 수</label>
-              <select name="teams" className="brutal-input w-full appearance-none text-base py-3">
+            <div className="w-36 space-y-1">
+              <label className="text-base font-mono font-bold" style={{ color: 'var(--text-secondary)' }}>팀 수</label>
+              <select name="teams" className="brutal-input w-full appearance-none text-lg py-3">
                 {Array.from({ length: 12 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}개 팀</option>)}
               </select>
             </div>
-            <button className="brutal-btn-red px-8 py-3 text-lg shrink-0 h-[54px]">새 세션</button>
+            <button className="brutal-btn-red px-8 py-3 text-xl shrink-0 h-[58px]">새 세션</button>
           </form>
         </div>
 
         {sessions.length === 0 ? (
-          <div className="text-center py-20 border-4 border-dashed font-mono text-base font-bold" style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}>활성화된 세션이 없습니다</div>
+          <div className="text-center py-20 border-4 border-dashed font-mono text-lg font-bold" style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}>활성화된 세션이 없습니다</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {sessions.map(s => {
@@ -1160,19 +1177,19 @@ export default function App() {
                 <div key={s.id} onClick={() => { setActiveSessionId(s.id); setAdminView('dashboard'); setExpandedTeamMemo(null); }} className="border-4 p-5 cursor-pointer hover:shadow-[6px_6px_0px_#7c3aed] transition-all space-y-4 group" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' }}>
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-poster text-2xl group-hover:text-purple-400 transition-colors" style={{ color: 'var(--text-primary)' }}>{s.groupName}</h3>
-                      <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>코드: {s.id}</span>
+                      <h3 className="font-poster text-3xl group-hover:text-purple-400 transition-colors" style={{ color: 'var(--text-primary)' }}>{s.groupName}</h3>
+                      <span className="font-mono text-base font-bold" style={{ color: 'var(--text-secondary)' }}>코드: {s.id}</span>
                     </div>
                     <div className={`w-4 h-4 border-2 ${s.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-600'}`} style={{ borderColor: 'var(--border-primary)' }}></div>
                   </div>
-                  <div className="flex gap-4 font-mono text-sm">
+                  <div className="flex gap-4 font-mono text-base">
                     <span className="font-bold" style={{ color: 'var(--text-secondary)' }}>팀: <span style={{ color: 'var(--text-primary)' }}>{s.teamCount}개</span></span>
                     <span className="font-bold" style={{ color: 'var(--text-secondary)' }}>참가: <span style={{ color: 'var(--text-primary)' }}>{s.participants.length}명</span></span>
                     <span className="font-bold" style={{ color: 'var(--text-secondary)' }}>제출: <span className={submittedCount === s.teamCount ? 'text-emerald-400' : 'text-yellow-400'}>{submittedCount}/{s.teamCount}</span></span>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t-2" style={{ borderColor: 'var(--border-secondary)' }}>
-                    <span className={`font-mono text-sm font-bold ${s.isOpen ? 'text-emerald-500' : ''}`} style={!s.isOpen ? { color: 'var(--text-secondary)' } : {}}>{s.isOpen ? '입장 허용 중' : '입장 대기'}</span>
-                    <span className="font-mono text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>관리 &rarr;</span>
+                    <span className={`font-mono text-base font-bold ${s.isOpen ? 'text-emerald-500' : ''}`} style={!s.isOpen ? { color: 'var(--text-secondary)' } : {}}>{s.isOpen ? '입장 허용 중' : '입장 대기'}</span>
+                    <span className="font-mono text-base font-bold" style={{ color: 'var(--text-secondary)' }}>관리 &rarr;</span>
                   </div>
                 </div>
               );
@@ -1453,7 +1470,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 정보 카드 - 가로 스와이프 슬라이드 */}
+        {/* 정보 카드 - 미리보기 그리드 + 팝업 */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
             <h3 className="text-sm font-poster tracking-[0.2em] flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -1465,29 +1482,24 @@ export default function App() {
               {isViewAllMode ? '우리 팀만 보기' : '전체 보기'}
             </button>
           </div>
-          {/* 가로 스와이프 카루셀 */}
-          <div className="relative">
-            <div
-              className="flex gap-3 overflow-x-auto pb-3 -mx-2 px-2"
-              style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
-            >
-              {myClues.map((clue, idx) => (
-                <div key={clue.id} onClick={() => { setSelectedClue(clue); setCluePopupIndex(idx); }}
-                  className="flex-shrink-0 w-[75%] border-4 cursor-pointer hover:border-purple-500 transition-all overflow-hidden group active:scale-[0.98] shadow-[4px_4px_0px_rgba(0,0,0,0.5)]"
-                  style={{ scrollSnapAlign: 'center', background: 'var(--bg-input)', borderColor: 'var(--border-secondary)' }}
-                >
-                  <div className="relative aspect-[4/3]">
-                    <img src={clue.imageUrl} alt={clue.label} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all duration-300" />
-                  </div>
-                  <div className="px-3 py-2 flex justify-between items-center border-t-4" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' }}>
-                    <span className="font-poster text-lg" style={{ color: 'var(--text-primary)' }}>{clue.label}</span>
-                    <span className="font-mono text-[10px] text-purple-500 font-bold">{idx + 1}/{myClues.length}</span>
-                  </div>
+          {/* 썸네일 그리드 - 카드를 눌러 확인 */}
+          <div className="grid grid-cols-3 gap-2">
+            {myClues.map((clue, idx) => (
+              <div key={clue.id} onClick={() => { setSelectedClue(clue); setCluePopupIndex(idx); }}
+                className="border-3 cursor-pointer hover:border-purple-500 transition-all overflow-hidden group active:scale-[0.96] shadow-[3px_3px_0px_rgba(0,0,0,0.4)]"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--border-secondary)', borderWidth: '3px' }}
+              >
+                <div className="relative aspect-square">
+                  <img src={clue.imageUrl} alt={clue.label} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all duration-300" loading="lazy" />
                 </div>
-              ))}
-            </div>
-            <p className="text-center font-mono text-[10px] font-bold mt-1" style={{ color: 'var(--text-secondary)' }}>← 좌우로 스와이프하여 카드를 넘기세요 →</p>
+                <div className="px-1.5 py-1 flex justify-between items-center border-t-2" style={{ borderColor: 'var(--border-secondary)', background: 'var(--bg-card)' }}>
+                  <span className="font-poster text-xs truncate" style={{ color: 'var(--text-primary)' }}>{clue.label}</span>
+                  <span className="font-mono text-[8px] text-purple-500 font-bold shrink-0 ml-1">{idx + 1}</span>
+                </div>
+              </div>
+            ))}
           </div>
+          <p className="text-center font-mono text-[10px] font-bold" style={{ color: 'var(--text-secondary)' }}>카드를 눌러 크게 확인하세요 · 팝업에서 좌우 스와이프 가능</p>
         </div>
 
         {/* 실시간 소통 - 카카오톡 스타일 채팅 */}
